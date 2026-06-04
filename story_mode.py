@@ -6,7 +6,7 @@ from gpt_layer import _get_client
 
 def generate_story_mode():
     import os
-print("LOADING CSV FROM:", os.path.abspath("ai_news_output.csv"))
+    print("LOADING CSV FROM:", os.path.abspath("ai_news_output.csv"))
 
     # -------------------------
     # Load news data
