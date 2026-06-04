@@ -16,7 +16,7 @@ import plotly.express as px
 import math
 import random
 from datetime import datetime
-
+from story_mode import generate_story_mode
 
 # ---------- CONFIG ----------
 st.set_page_config(
@@ -495,12 +495,11 @@ with tabs[0]:
     # ---------- STORY MODE ----------
     st.markdown("### Morning Macro Brief")
 
-    if "story_text" not in st.session_state:
-        try:
-            from story_mode import generate_story_mode
-            st.session_state["story_text"] = generate_story_mode()
-        except Exception as e:
-            st.session_state["story_text"] = f"Story mode error: {e}"
+   import story_mode
+
+    st.write("Using:", story_mode.__file__)
+
+    st.session_state["story_text"] = story_mode.generate_story_mode()
 
     story_text = st.session_state.get("story_text", "No story mode brief generated yet.")
 
