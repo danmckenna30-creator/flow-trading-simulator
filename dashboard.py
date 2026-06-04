@@ -496,6 +496,10 @@ with tabs[0]:
     st.markdown("### Morning Macro Brief")
     
     import story_mode
+    import os
+
+    # DEBUG: show the actual CSV path Streamlit is reading
+    st.write("CSV PATH:", os.path.abspath("ai_news_output.csv"))
 
     st.session_state["story_text"] = story_mode.generate_story_mode()
 
