@@ -101,8 +101,18 @@ Style:
         if client is None:
             return "DEBUG: _get_client() returned None"
             
-        return "DEBUG: CLIENT CREATED SUCCESSFULLY"
-    except Exception as e:
-        return f"DEBUG ERROR: {e}"
-if __name__ == "__main__":
-    print(generate_story_mode())
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "user",
+                    "content": "Reply with the word TEST"
+                }
+            ],
+            max_tokens=10
+        )
+
+    return f"DEBUG RESPONSE: {response.choices[0].message.content}"
+
+except Exception as e:
+    return f"DEBUG ERROR: {e}"
