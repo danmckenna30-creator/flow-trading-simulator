@@ -98,45 +98,13 @@ Style:
     # -------------------------
     try:
         client = _get_client()
+        
+    if client is None:
+        return "DEBUG: _get_client() returned None"
 
-        if client is None:
-            return (
-                "OpenAI client not available. "
-                "Check OPENAI_API_KEY."
-            )
-
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            max_tokens=500,
-            temperature=0.3
-        )
-
-        story = response.choices[0].message.content
-
-        if not story:
-            return "OpenAI returned an empty response."
-
-        try:
-            with open(
-                "story_mode.txt",
-                "w",
-                encoding="utf-8"
-            ) as f:
-                f.write(story)
-        except Exception as e:
-            print(f"[story_mode] save error: {e}")
-
-        return story
+    return "DEBUG: CLIENT CREATED SUCCESSFULLY"
 
     except Exception as e:
-        return f"Story mode error: {e}"
-
-
-if __name__ == "__main__":
-    print(generate_story_mode())
+    return f"DEBUG ERROR: {e}"
+    if __name__ == "__main__":
+        print(generate_story_mode())
