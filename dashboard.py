@@ -497,18 +497,19 @@ with tabs[0]:
     
     import story_mode
 
-    st.write("Using:", story_mode.__file__)
-
     st.session_state["story_text"] = story_mode.generate_story_mode()
 
     story_text = st.session_state.get("story_text", "No story mode brief generated yet.")
 
     st.markdown(
-        """
+        f"""
         <div class='card' style='white-space: pre-wrap; line-height: 1.4;'>
+        <p style='color:#DDDDDD;'>{story_text}</p>
+        </div>
         """,
         unsafe_allow_html=True
     )
+
 
     st.markdown(
         f"<p style='color:#DDDDDD;'>{story_text}</p>",
@@ -517,16 +518,16 @@ with tabs[0]:
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    with st.sidebar:
-        st.markdown("## Story Mode")
+with st.sidebar:
+    st.markdown("## Story Mode")
 
-        if st.button("Regenerate Morning Brief"):
-            try:
-                from story_mode import generate_story_mode
-                st.session_state["story_text"] = generate_story_mode()
-                st.rerun()
-            except Exception as e:
-                st.error(f"Story mode error: {e}")
+    if st.button("Regenerate Morning Brief"):
+        try:
+            from story_mode import generate_story_mode
+            st.session_state["story_text"] = generate_story_mode()
+            st.rerun()
+        except Exception as e:
+            st.error(f"Story mode error: {e}")
 
     # ---------- MARKET SNAPSHOT ----------
     st.markdown("### Market Snapshot")
