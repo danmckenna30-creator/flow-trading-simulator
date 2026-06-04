@@ -1,28 +1,50 @@
 import json
-import os
 import pandas as pd
 from datetime import datetime, timedelta, timezone
-from gpt_layer import call_gpt
+from gpt_layer import _get_client
+
 
 def generate_story_mode():
-    # Load news
+    # -------------------------
+    # Load news data
+    # -------------------------
     try:
         df = pd.read_csv("ai_news_output.csv")
-        df["date"] = pd.to_datetime(df["date"], utc=True, errors="coerce")
-    except Exception:
-        return "No news data available."
 
-    # Filter last 24 hours
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-    recent = df[df["date"] >= cutoff]
+        if "date" in df.columns:
+            df["date"] = pd.to_datetime(
+                df["date"],
+                utc=True,
+                errors="coerce"
+            )
 
-    if recent.empty:
-        recent = df.tail(20)  # fallback to latest 20 if nothing in last 24h
+    except Exception as e:
+        return f"Could not load ai_news_output.csv: {e}"
 
-    # Load GPT macro analysis
+    # -------------------------
+    # Filter recent headlines
+    # -------------------------
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+
+        if "date" in df.columns:
+            recent = df[df["date"] >= cutoff]
+        else:
+            recent = df
+
+        if recent.empty:
+            recent = df.tail(20)
+
+    except Exception as e:
+        return f"News filtering error: {e}"
+
+    # -------------------------
+    # Load macro analysis
+    # -------------------------
     try:
         with open("gpt_analysis.json", "r") as f:
             gpt = json.load(f)
+
     except Exception:
         gpt = {
             "macro_theme": "unknown",
@@ -32,62 +54,88 @@ def generate_story_mode():
             "key_points": []
         }
 
+    # -------------------------
     # Build prompt
-    cols = [c for c in ["headline", "sentiment", "topic"] if c in recent.columns]
+    # -------------------------
+    cols = [
+        c for c in ["headline", "sentiment", "topic"]
+        if c in recent.columns
+    ]
+
+    headlines_text = recent[cols].to_string(index=False)
+
     prompt = f"""
-You are a macro analyst writing a morning brief for traders.
+You are a senior macro strategist writing a morning brief for traders.
 
-Use the following data:
+Use the information below.
 
-1. Last 24h headlines:
-{recent[cols].to_string(index=False)}
+HEADLINES:
+{headlines_text}
 
-2. Macro analysis:
+MACRO ANALYSIS:
 {json.dumps(gpt, indent=2)}
 
-Write a concise, trader-ready morning note with:
-- Market tone (1 paragraph)
-- Key macro themes (3-5 bullets)
-- What drove sentiment
-- Risk regime (risk-on/off/neutral)
-- What to watch today
-- A final 3-bullet summary
+Write:
 
-Keep it sharp, professional, and Bloomberg-style.
+1. Market Tone
+2. Key Macro Themes
+3. What Drove Sentiment
+4. Risk Regime
+5. What To Watch Today
+6. Three Key Takeaways
+
+Style:
+- Bloomberg
+- Professional
+- Concise
+- No markdown tables
+- Maximum 500 words
 """
 
+    # -------------------------
+    # OpenAI call
+    # -------------------------
     try:
-        story = call_gpt([prompt])
-        if isinstance(story, dict):
-            story = json.dumps(story, indent=2)
-        if not story:
-            return "Story mode generation failed."
+        client = _get_client()
 
-        # Use direct client call for story (not structured JSON)
-        from gpt_layer import _get_client
-        c = _get_client()
-        if c is None:
-            return "No OpenAI key available for story mode."
+        if client is None:
+            return (
+                "OpenAI client not available. "
+                "Check OPENAI_API_KEY."
+            )
 
-        response = c.chat.completions.create(
+        response = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=400,
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            max_tokens=500,
             temperature=0.3
         )
+
         story = response.choices[0].message.content
 
+        if not story:
+            return "OpenAI returned an empty response."
+
         try:
-            with open("story_mode.txt", "w") as f:
+            with open(
+                "story_mode.txt",
+                "w",
+                encoding="utf-8"
+            ) as f:
                 f.write(story)
         except Exception as e:
-            print(f"[story_mode] Could not save file: {e}")
+            print(f"[story_mode] save error: {e}")
 
         return story
 
     except Exception as e:
-        print(f"[story_mode error] {e}")
         return f"Story mode error: {e}"
+
 
 if __name__ == "__main__":
     print(generate_story_mode())
