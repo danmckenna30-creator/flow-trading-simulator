@@ -62,7 +62,7 @@ def generate_story_mode():
         if c in recent.columns
     ]
 
-    headlines_text = "\n".join(recent["headline"].head(5).tolist())
+    headlines_text = "\n".join(recent["headline"].head(3).tolist())
 
     prompt = f"""
 You are a senior macro strategist writing a professional morning note for institutional traders.
@@ -71,7 +71,7 @@ HEADLINES:
 {headlines_text}
 
 MACRO ANALYSIS:
-{json.dumps(gpt, indent=2)}
+{json.dumps(gpt)}
 
 You MUST output all of the following sections.
 
