@@ -1,17 +1,28 @@
-import requests
 import json
-from openai import OpenAI
 import os
 import streamlit as st
 from openai import OpenAI
 
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+def _get_client():
+    try:
+        api_key = st.secrets["OPENAI_API_KEY"]
+    except Exception:
+        api_key = os.environ.get("OPENAI_API_KEY", "")
+    if not api_key:
+        print("[Warning] OPENAI_API_KEY not found.")
+        return None
+    return OpenAI(api_key=api_key)
 
+# Lazy client — only created when needed
+client = None
 
 def call_gpt(headlines):
-    """
-    Takes a list of relevant headlines and returns structured macro analysis.
-    """
+    global client
+    if client is None:
+        client = _get_client()
+    if client is None:
+        print("[GPT] No API key available, skipping.")
+        return None
 
     prompt = f"""
 You are a macro-finance analyst. You will receive a list of news headlines.
@@ -28,18 +39,19 @@ Here are the headlines:
 
 Return ONLY valid JSON. No commentary.
 """
-
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=200,
-        temperature=0.2
-    )
-
-    content = response.choices[0].message.content
-
     try:
-        return json.loads(content)
-    except:
-        print("GPT output was not valid JSON.")
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=200,
+            temperature=0.2
+        )
+        content = response.choices[0].message.content
+        try:
+            return json.loads(content)
+        except Exception:
+            print("GPT output was not valid JSON.")
+            return None
+    except Exception as e:
+        print(f"[GPT error] {e}")
         return None
