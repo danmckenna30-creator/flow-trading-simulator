@@ -177,6 +177,12 @@ def run_pipeline():
 
     if new_results:
         run_gpt_analysis(new_results)
+        try:
+            from story_mode import generate_story_mode
+            generate_story_mode()
+            print("Story mode generated.")
+        except Exception as e:
+            print(f"[Story mode error] {e}")
 
         # Save rolling AI hype count
         ai_today = sum(
