@@ -79,21 +79,16 @@ You MUST output all of the following sections.
 One concise paragraph.
 
 ## Key Macro Themes
-Provide exactly 5 bullet points.
+Provide exactly 3 bullet points.
 
 ## What Drove Sentiment
 Explain the main drivers of market sentiment today.
 
-## Risk Regime
-State ONE of:
-- Risk-On
-- Risk-Off
-- Neutral
-
-Then explain why in 2-3 sentences.
+## Risk 
+Explain Risk Regime and why in 2 sentences
 
 ## What To Watch Today
-Provide exactly 5 bullet points covering:
+Provide exactly 2 bullet points covering:
 - Economic data
 - Central banks
 - Commodities
@@ -101,7 +96,7 @@ Provide exactly 5 bullet points covering:
 - Equities
 
 ## Three Key Takeaways
-Provide exactly 3 bullet points.
+Provide the key takeaway, 1 sentence 
 
 Style:
 - Bloomberg terminal
@@ -128,10 +123,10 @@ Style:
                     "content": prompt
                 }
             ],
-            max_tokens=500
+            max_tokens=200
         )
 
-        return response.choices[0].message.content[:500]
+        return response.choices[0].message.content
 
     except Exception as e:
         return f"DEBUG ERROR: {e}"
