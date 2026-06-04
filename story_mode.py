@@ -62,12 +62,10 @@ def generate_story_mode():
         if c in recent.columns
     ]
 
-    headlines_text = recent[cols].to_string(index=False)
+    headlines_text = recent[["headline"]].head(3).to_string(index=False)
 
-    prompt = f"""
-You are a senior macro strategist writing a morning brief for traders.
-
-Use the information below.
+   prompt = f"""
+You are a senior macro strategist writing a professional morning note for institutional traders.
 
 HEADLINES:
 {headlines_text}
@@ -75,23 +73,44 @@ HEADLINES:
 MACRO ANALYSIS:
 {json.dumps(gpt, indent=2)}
 
-Write:
+You MUST output all of the following sections.
 
-1. Market Tone
-2. Key Macro Themes
-3. What Drove Sentiment
-4. Risk Regime
-5. What To Watch Today
-6. Three Key Takeaways
+## Market Tone
+One concise paragraph.
+
+## Key Macro Themes
+Provide exactly 5 bullet points.
+
+## What Drove Sentiment
+Explain the main drivers of market sentiment today.
+
+## Risk Regime
+State ONE of:
+- Risk-On
+- Risk-Off
+- Neutral
+
+Then explain why in 2-3 sentences.
+
+## What To Watch Today
+Provide exactly 5 bullet points covering:
+- Economic data
+- Central banks
+- Commodities
+- Rates
+- Equities
+
+## Three Key Takeaways
+Provide exactly 3 bullet points.
 
 Style:
-- Bloomberg
+- Bloomberg terminal
 - Professional
 - Concise
+- No fluff
 - No markdown tables
-- Maximum 500 words
+- Maximum 600 words
 """
-
     # -------------------------
     # OpenAI call
     # -------------------------
