@@ -637,11 +637,11 @@ with tabs[1]:
     st.markdown("### Cross-Asset Risk Monitor")
 
     # ---------- RISK DATA ----------
-    vix_change = prices.get("VIX", {}).get("change", 0) or 0
-    spx_change = prices.get("S&P 500", {}).get("change", 0) or 0
-    usdjpy_change = prices.get("USDJPY", {}).get("change", 0) or 0
-    oil_change = prices.get("Brent Crude", {}).get("change", 0) or 0
-    copper_change = prices.get("Copper", {}).get("change", 0) or 0
+    vix_change = prices.get("VIX", {}).get("change") or 0 or 0
+    spx_change = prices.get("S&P 500", {}).get("change") or 0 or 0
+    usdjpy_change = prices.get("USDJPY", {}).get("change") or 0 or 0
+    oil_change = prices.get("Brent Crude", {}).get("change") or 0 or 0
+    copper_change = prices.get("Copper", {}).get("change") or 0 or 0
 
     news_sentiment = 0
     if news_df is not None and "sentiment" in news_df.columns and len(news_df) > 0:
@@ -792,8 +792,8 @@ with tabs[1]:
     st.markdown("### AI Bubble Risk")
 
     # --- 1. Price action & volatility ---
-    nvda = prices.get("NVDA", {}).get("change", 0)
-    soxx = prices.get("SOXX", {}).get("change", 0)
+    nvda = prices.get("NVDA", {}).get("change") or 0
+    soxx = prices.get("SOXX", {}).get("change") or 0
 
     vol_risk = 0
     if abs(nvda) > 4 or abs(soxx) > 3:
@@ -802,8 +802,8 @@ with tabs[1]:
         vol_risk = 1
 
     # --- 2. Breadth ---
-    spx = prices.get("S&P 500", {}).get("change", 0)
-    rsp = prices.get("RSP", {}).get("change", 0)
+    spx = prices.get("S&P 500", {}).get("change") or 0
+    rsp = prices.get("RSP", {}).get("change") or 0
     breadth_gap = spx - rsp
 
     breadth_risk = 0
@@ -821,14 +821,16 @@ with tabs[1]:
         ratio_risk = 1
 
     # --- 4. AI sentiment ---
-    ai_news = news_df[
-        news_df["headline"].str.contains(
-            "AI|artificial intelligence|chip|GPU|Nvidia|semiconductor|OpenAI",
-            case=False, na=False
-        )
-    ]
-
-    ai_sent = ai_news["sentiment"].mean() if len(ai_news) > 0 else 0
+    if news_df is not None and "headline" in news_df.columns and len(news_df) > 0:
+        ai_news = news_df[
+            news_df["headline"].str.contains(
+                "AI|artificial intelligence|chip|GPU|Nvidia|semiconductor|OpenAI",
+                case=False, na=False
+            )
+        ]
+        ai_sent = ai_news["sentiment"].mean() if len(ai_news) > 0 else 0
+    else:
+        ai_sent = 0
 
     sentiment_risk = 0
     if ai_sent > 0.35:
@@ -1175,54 +1177,31 @@ def _get_spot(ticker: str) -> float | None:
         pass
     return None
 
-@st.cache_data(ttl=300)
-def get_vix():
-    """Fetch the VIX index level. Fallback to 20 if unavailable."""
-    try:
-        import yfinance as yf
-        hist = yf.Ticker("^VIX").history(period="2d")
-        if hist is not None and len(hist) > 0:
-            return float(hist["Close"].iloc[-1])
-    except Exception:
-        pass
-    return 20.0  # normal volatility fallback
-def get_dynamic_spread_bps(base_spread_bps: float) -> float:
-    """
-    Volatility-linked spread model:
-    Spread widens linearly with VIX.
-    VIX = 20 → normal spreads
-    VIX = 40 → spreads double
-    """
-    vix = get_vix()
-    multiplier = 1 + (vix / 20)
-    return base_spread_bps * multiplier
-
 
 def add_client_trade(asset_label: str, side: str, notional: float):
+    """
+    Record a client trade, update inventory, and book spread P&L.
+    side: "Buy" (client buys, we sell) or "Sell" (client sells, we buy).
+    """
     asset = FLOW_ASSETS[asset_label]
+    spread_bps = asset["spread_bps"]
 
-    # --- Volatility-linked spread ---
-    base_spread_bps = asset["spread_bps"]
-    spread_bps = get_dynamic_spread_bps(base_spread_bps)
-
+    # Spread P&L: we earn the spread on every client trade
     spread_earned = notional * (spread_bps / 10_000)
     st.session_state["pnl"]["spread_pnl"] += spread_earned
 
-    # Inventory update
+    # Inventory: client Buy → we are short (negative); client Sell → we are long (positive)
     direction = -1 if side == "Buy" else 1
     inv = st.session_state["inventory"]
     inv[asset_label] = inv.get(asset_label, 0.0) + direction * notional
 
     # Log the trade
     st.session_state["flow_trades"].append({
-        "asset": asset_label,
+        "asset":       asset_label,
         "client_side": side,
-        "notional": notional,
+        "notional":    notional,
         "spread_earned": round(spread_earned, 2),
-        "spread_bps_used": round(spread_bps, 2),
     })
-
-
 
 
 def compute_hedge_for_inventory() -> list:
@@ -1294,52 +1273,30 @@ def render_flow_trading_tab():
 
     with col1:
         st.subheader("New Client Flow")
+
         asset_label = st.selectbox("Asset", list(FLOW_ASSETS.keys()))
         side = st.radio("Client side", ["Buy", "Sell"], horizontal=True)
         notional = st.number_input("Notional (USD)", min_value=100_000.0, value=1_000_000.0, step=100_000.0)
 
-    # --- Volatility-linked spread display ---
-        current_vix = get_vix()
-        st.metric("VIX (Volatility Index)", f"{current_vix:.2f}")
-
-        base_spread = FLOW_ASSETS[asset_label]["spread_bps"]
-        dyn_spread = get_dynamic_spread_bps(base_spread)
-        st.metric("Current Spread (bps)", f"{dyn_spread:.2f}")
-
-    # --- Buttons ---
-    if st.button("Add Client Trade"):
+        if st.button("Add Client Trade"):
             add_client_trade(asset_label, side, notional)
             st.success("Client trade added to book.")
 
-    if st.button("Hedge Inventory"):
-        hedges = compute_hedge_for_inventory()
-        if hedges:
-            st.info("Hedges executed:")
-            for h in hedges:
-                st.write(
-                    f"{h['hedge_side']} {h['hedge_ticker']} for ~${h['hedge_notional']:,.0f} "
-                    f"({h['units']:,.0f} units)"
-                )
-        else:
-            st.info("No inventory to hedge.")
+        if st.button("Hedge Inventory"):
+            hedges = compute_hedge_for_inventory()
+            if hedges:
+                st.info("Hedges executed:")
+                for h in hedges:
+                    st.write(
+                        f"{h['hedge_side']} {h['hedge_ticker']} for ~${h['hedge_notional']:,.0f} "
+                        f"({h['units']:,.0f} units)"
+                    )
+            else:
+                st.info("No inventory to hedge.")
 
-    if st.button("Mark-to-Market Inventory"):
-        mtm = mark_to_market_inventory()
-        st.write(f"Inventory MTM P&L this step: ${mtm:,.0f}")
-
-    st.markdown("---")
-
-    if st.button("🔄 Reset Simulation", type="secondary"):
-        st.session_state["inventory"]   = {}
-        st.session_state["flow_trades"] = []
-        st.session_state["hedge_trades"]= []
-        st.session_state["pnl"] = {
-            "spread_pnl":    0.0,
-            "hedge_pnl":     0.0,
-            "inventory_pnl": 0.0,
-        }
-        st.success("Simulation reset.")
-        st.rerun()
+        if st.button("Mark-to-Market Inventory"):
+            mtm = mark_to_market_inventory()
+            st.write(f"Inventory MTM P&L this step: ${mtm:,.0f}")
 
     with col2:
         st.subheader("Current Inventory")
@@ -1372,8 +1329,6 @@ def render_flow_trading_tab():
             st.dataframe(flow_df, use_container_width=True)
         else:
             st.write("No client trades yet.")
-
-        
 
 
 with tabs[4]:

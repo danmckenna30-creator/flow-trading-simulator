@@ -1,20 +1,34 @@
 import json
 import hashlib
 import os
+import csv
+from datetime import datetime
+
 import torch
 import numpy as np
 import pandas as pd
 import requests
+import streamlit as st
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
-from apscheduler.schedulers.blocking import BlockingScheduler
+
 from gpt_layer import call_gpt
 from story_mode import generate_story_mode
 
-# --- FinBERT Setup ---
-tokenizer = AutoTokenizer.from_pretrained("ProsusAI/finbert")
-model = AutoModelForSequenceClassification.from_pretrained("ProsusAI/finbert")
+@st.cache_resource
+def load_finbert():
+    tokenizer = AutoTokenizer.from_pretrained("ProsusAI/finbert")
+    model = AutoModelForSequenceClassification.from_pretrained("ProsusAI/finbert")
+    return tokenizer, model
 
-NEWSAPI_KEY = "9e771673d1b54ded8968a567705e3fda"
+tokenizer, model = load_finbert()
+
+# --- Secrets ---
+try:
+    NEWSAPI_KEY = st.secrets["NEWS_API_KEY"]
+except Exception:
+    NEWSAPI_KEY = os.environ.get("NEWS_API_KEY", "")
+    if not NEWSAPI_KEY:
+        print("[Warning] NEWS_API_KEY not found in secrets or environment.")
 
 # --- Memory (deduplication) ---
 def load_memory():
@@ -80,12 +94,20 @@ def process_headline(headline):
 # --- News Fetching ---
 def fetch_newsapi():
     try:
-        url  = f"https://newsapi.org/v2/top-headlines?category=business&language=en&apiKey={NEWSAPI_KEY}"
+        url = (
+            "https://newsapi.org/v2/top-headlines"
+            f"?category=business&language=en&apiKey={NEWSAPI_KEY}"
+        )
         resp = requests.get(url, timeout=10)
         resp.raise_for_status()
         data = resp.json()
         return [
-            {"source": a["source"]["name"], "headline": a["title"], "date": a["publishedAt"]}
+            {
+                "source": a["source"]["name"],
+                "headline": a["title"],
+                "date": a["publishedAt"],
+                "url": a.get("url")
+            }
             for a in data.get("articles", [])
             if a.get("title")
         ]
@@ -99,13 +121,13 @@ def fetch_all_sources():
 # --- Processing ---
 def process_all_news():
     articles = fetch_all_sources()
-    results  = []
+    results = []
     for article in articles:
         try:
             analysis = process_headline(article["headline"])
             analysis["source"] = article.get("source")
-            analysis["date"]   = article.get("date")
-            analysis["id"]     = article_id(article)
+            analysis["date"] = article.get("date")
+            analysis["id"] = article_id(article)
             results.append(analysis)
         except Exception as e:
             print(f"[Processing error] {e}")
@@ -115,17 +137,15 @@ def process_all_news():
 def save_results(results):
     if not results:
         print("No results to save.")
-        return
+        return []
 
-    # Filter to only new articles using memory
     memory = load_memory()
     new_results = [r for r in results if r["id"] not in memory]
 
     if not new_results:
         print("No new articles to save.")
-        return
+        return []
 
-    # Append to existing CSV or create new one
     new_df = pd.DataFrame(new_results)
     if os.path.exists("ai_news_output.csv"):
         old_df = pd.read_csv("ai_news_output.csv")
@@ -135,7 +155,6 @@ def save_results(results):
 
     df.to_csv("ai_news_output.csv", index=False)
 
-    # Update memory with newly seen IDs
     for r in new_results:
         memory.add(r["id"])
     save_memory(memory)
@@ -145,13 +164,13 @@ def save_results(results):
 
 # --- GPT Analysis ---
 def run_gpt_analysis(results):
-    """Take top 3 most relevant headlines and run GPT analysis."""
     sorted_results = sorted(results, key=lambda x: x["relevance"], reverse=True)
     relevant = [r["headline"] for r in sorted_results[:3]]
 
     if not relevant:
         print("No relevant headlines for GPT analysis.")
         return
+
     try:
         gpt_output = call_gpt(relevant)
         if gpt_output:
@@ -166,26 +185,18 @@ def run_pipeline():
     print("Fetching and processing news...")
     results = process_all_news()
     new_results = save_results(results)
+
     if new_results:
         run_gpt_analysis(new_results)
+
+        # Save rolling AI hype count
+        ai_today = sum(
+            1 for a in new_results
+            if any(k in a["headline"].lower() for k in
+                   ["ai", "artificial intelligence", "chip", "semiconductor", "gpu", "nvidia", "openai"])
+        )
+        with open("ai_hype_history.csv", "a", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow([datetime.now().strftime("%Y-%m-%d"), ai_today])
+
     print("Done.")
-
-if __name__ == "__main__":
-    run_pipeline()  # run once immediately on start
-    scheduler = BlockingScheduler()
-    scheduler.add_job(run_pipeline, "interval", minutes=60)
-    scheduler.add_job(generate_story_mode, "cron", hour=8, minute=0)
-    print("Scheduler started — updating every 60 minutes, story mode at 8am daily.")
-    scheduler.start()
-
-# Save rolling AI hype count
-ai_today = sum(
-    1 for a in new_articles
-    if any(k in a["headline"].lower() for k in ["ai", "artificial intelligence", "chip", "semiconductor", "gpu", "nvidia", "openai"])
-)
-
-# Append to ai_hype_history.csv
-import csv
-with open("ai_hype_history.csv", "a", newline="") as f:
-    writer = csv.writer(f)
-    writer.writerow([datetime.now().strftime("%Y-%m-%d"), ai_today])
