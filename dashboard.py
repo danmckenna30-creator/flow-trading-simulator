@@ -4,6 +4,8 @@ import streamlit as st
 from datetime import datetime
 import os
 from market_data import get_market_data
+from news_reader import run_pipeline
+from streamlit_autorefresh import st_autorefresh
 import plotly.graph_objects as go
 from market_data import get_yield_curve
 import pandas as pd
@@ -282,6 +284,21 @@ def render_sp500_tab():
 # =========================================================
 
 with tabs[0]:
+
+    # Auto-refresh every 60 minutes
+    st_autorefresh(interval=60 * 60 * 1000, key="macro_refresh")
+
+    # Run news pipeline then reload data
+    with st.spinner("Fetching latest news and sentiment..."):
+        try:
+            run_pipeline()
+        except Exception as e:
+            st.warning(f"Pipeline error: {e}")
+
+    # Reload after pipeline runs
+    news_df = load_news()
+    gpt = load_gpt()
+    ai_hype_df = load_ai_hype_history()
 
     # ---------- TOP ROW: MACRO SNAPSHOT ----------
     col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
