@@ -494,8 +494,8 @@ with tabs[0]:
 
     # ---------- STORY MODE ----------
     st.markdown("### Morning Macro Brief")
-
-   import story_mode
+    
+    import story_mode
 
     st.write("Using:", story_mode.__file__)
 
