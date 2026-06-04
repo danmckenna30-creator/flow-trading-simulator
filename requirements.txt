@@ -1,0 +1,13 @@
+streamlit
+openai
+yfinance
+pandas
+numpy
+requests
+plotly
+pytz
+vaderSentiment
+apscheduler
+streamlit-autorefresh
+lxml
+beautifulsoup4
