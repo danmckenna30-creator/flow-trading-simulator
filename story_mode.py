@@ -93,18 +93,17 @@ Style:
 - Maximum 500 words
 """
 
-    # -------------------------
-    # OpenAI call
-    # -------------------------
-    try:
-        client = _get_client()
+# -------------------------
+# OpenAI call
+# -------------------------
+try:
+    client = _get_client()
         
     if client is None:
         return "DEBUG: _get_client() returned None"
 
     return "DEBUG: CLIENT CREATED SUCCESSFULLY"
-
-    except Exception as e:
+except Exception as e:
     return f"DEBUG ERROR: {e}"
-    if __name__ == "__main__":
-        print(generate_story_mode())
+if __name__ == "__main__":
+    print(generate_story_mode())
