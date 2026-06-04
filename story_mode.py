@@ -112,7 +112,7 @@ Style:
             max_tokens=10
         )
 
-    return f"DEBUG RESPONSE: {response.choices[0].message.content}"
+        return f"DEBUG RESPONSE: {response.choices[0].message.content}"
 
     except Exception as e:
         return f"DEBUG ERROR: {e}"
