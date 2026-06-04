@@ -65,52 +65,52 @@ def generate_story_mode():
     headlines_text = recent[["headline"]].head(3).to_string(index=False)
 
    prompt = f"""
-You are a senior macro strategist writing a professional morning note for institutional traders.
+    You are a senior macro strategist writing a professional morning note for institutional traders.
 
-HEADLINES:
-{headlines_text}
+    HEADLINES:
+    {headlines_text}
 
-MACRO ANALYSIS:
-{json.dumps(gpt, indent=2)}
+    MACRO ANALYSIS:
+    {json.dumps(gpt, indent=2)}
 
-You MUST output all of the following sections.
+    You MUST output all of the following sections.
 
-## Market Tone
-One concise paragraph.
+    ## Market Tone
+    One concise paragraph.
 
-## Key Macro Themes
-Provide exactly 5 bullet points.
+    ## Key Macro Themes
+    Provide exactly 5 bullet points.
 
-## What Drove Sentiment
-Explain the main drivers of market sentiment today.
+    ## What Drove Sentiment
+    Explain the main drivers of market sentiment today.
 
-## Risk Regime
-State ONE of:
-- Risk-On
-- Risk-Off
-- Neutral
+    ## Risk Regime
+    State ONE of:
+    - Risk-On
+    - Risk-Off
+    - Neutral
 
-Then explain why in 2-3 sentences.
+    Then explain why in 2-3 sentences.
 
-## What To Watch Today
-Provide exactly 5 bullet points covering:
-- Economic data
-- Central banks
-- Commodities
-- Rates
-- Equities
+    ## What To Watch Today
+    Provide exactly 5 bullet points covering:
+    - Economic data
+    - Central banks
+    - Commodities
+    - Rates
+    - Equities
 
-## Three Key Takeaways
-Provide exactly 3 bullet points.
+    ## Three Key Takeaways
+    Provide exactly 3 bullet points.
 
-Style:
-- Bloomberg terminal
-- Professional
-- Concise
-- No fluff
-- No markdown tables
-- Maximum 600 words
-"""
+    Style:
+    - Bloomberg terminal
+    - Professional
+    - Concise
+    - No fluff
+    - No markdown tables
+    - Maximum 600 words
+    """
     # -------------------------
     # OpenAI call
     # -------------------------
