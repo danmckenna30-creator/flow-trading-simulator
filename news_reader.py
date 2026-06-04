@@ -136,13 +136,15 @@ def save_results(results):
         return []
 
     new_df = pd.DataFrame(new_results)
-    if os.path.exists("ai_news_output.csv"):
-        old_df = pd.read_csv("ai_news_output.csv")
+    CSV_PATH = "/mount/src/flow-trading-simulator/ai_news_output.csv"
+
+    if os.path.exists(CSV_PATH):
+        old_df = pd.read_csv(CSV_PATH)
         df = pd.concat([old_df, new_df], ignore_index=True)
     else:
         df = new_df
-
-    df.to_csv("ai_news_output.csv", index=False)
+        
+    df.to_csv(CSV_PATH, index=False)
 
     for r in new_results:
         memory.add(r["id"])
