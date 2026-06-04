@@ -62,7 +62,7 @@ def generate_story_mode():
         if c in recent.columns
     ]
 
-    headlines_text = recent[["headline"]].head(3).to_string(index=False)
+    headlines_text = "\n".join(recent["headline"].head(5).tolist())
 
     prompt = f"""
 You are a senior macro strategist writing a professional morning note for institutional traders.
@@ -104,7 +104,6 @@ Style:
 - Concise   
 - No fluff
 - No markdown tables
-- Maximum 600 words
 """
     # -------------------------
     # OpenAI call
@@ -123,7 +122,7 @@ Style:
                     "content": prompt
                 }
             ],
-            max_tokens=200
+            max_tokens=350
         )
 
         return response.choices[0].message.content
