@@ -495,11 +495,14 @@ with tabs[0]:
     # ---------- STORY MODE ----------
     st.markdown("### Morning Macro Brief")
 
-    try:
-        with open("story_mode.txt", "r") as f:
-            story_text = f.read()
-    except:
-        story_text = "No story mode brief generated yet."
+    if "story_text" not in st.session_state:
+        try:
+            from story_mode import generate_story_mode
+            st.session_state["story_text"] = generate_story_mode()
+        except Exception as e:
+            st.session_state["story_text"] = f"Story mode error: {e}"
+
+    story_text = st.session_state.get("story_text", "No story mode brief generated yet.")
 
     st.markdown(
         """
@@ -519,8 +522,12 @@ with tabs[0]:
         st.markdown("## Story Mode")
 
         if st.button("Regenerate Morning Brief"):
-            os.system("python story_mode.py")
-            st.experimental_rerun()
+            try:
+                from story_mode import generate_story_mode
+                st.session_state["story_text"] = generate_story_mode()
+                st.rerun()
+            except Exception as e:
+                st.error(f"Story mode error: {e}")
 
     # ---------- MARKET SNAPSHOT ----------
     st.markdown("### Market Snapshot")
