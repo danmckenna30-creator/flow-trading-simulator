@@ -88,15 +88,15 @@ Explain the main drivers of market sentiment today.
 Explain Risk Regime and why in 2 sentences
 
 ## What To Watch Today
-Provide exactly 2 bullet points covering:
+Provide exactly 3 bullet points covering:
 - Economic data
 - Central banks
 - Commodities
 - Rates
 - Equities
 
-## Three Key Takeaways
-Provide the key takeaway, 1 sentence 
+## The Key Takeaway
+Provide the key takeaway, 3 sentences 
 
 Style:
 - Bloomberg terminal
