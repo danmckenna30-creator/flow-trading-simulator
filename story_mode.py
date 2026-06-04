@@ -5,7 +5,6 @@ from gpt_layer import _get_client
 
 
 def generate_story_mode():
-    return "TESTING NEW STORY_MODE FILE"
     # -------------------------
     # Load news data
     # -------------------------
