@@ -509,15 +509,6 @@ with tabs[0]:
         """,
         unsafe_allow_html=True
     )
-
-
-    st.markdown(
-        f"<p style='color:#DDDDDD;'>{story_text}</p>",
-        unsafe_allow_html=True
-    )
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
 with st.sidebar:
     st.markdown("## Story Mode")
 
