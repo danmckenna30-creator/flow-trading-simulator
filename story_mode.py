@@ -97,22 +97,22 @@ Style:
     # -------------------------
     try:
         client = _get_client()
-        
+
         if client is None:
             return "DEBUG: _get_client() returned None"
-            
+
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {
                     "role": "user",
-                    "content": "Reply with the word TEST"
+                    "content": prompt
                 }
             ],
-            max_tokens=10
+            max_tokens=500
         )
 
-        return f"DEBUG RESPONSE: {response.choices[0].message.content}"
+        return response.choices[0].message.content[:500]
 
     except Exception as e:
         return f"DEBUG ERROR: {e}"
