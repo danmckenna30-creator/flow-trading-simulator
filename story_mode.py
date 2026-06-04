@@ -78,7 +78,7 @@ MACRO ANALYSIS:
 You MUST output all of the following sections.
 
 ## Market Tone
-One concise paragraph.
+Provide one concise paragraph.
 
 ## Key Macro Themes
 Provide exactly 3 bullet points.
