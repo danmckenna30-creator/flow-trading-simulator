@@ -67,8 +67,10 @@ def generate_story_mode():
     prompt = f"""
 You are a senior macro strategist writing a professional morning note for institutional traders.
 
-HEADLINES:
-{headlines_text}
+Format headings EXACTLY like this:
+
+## Market Tone
+<paragraph here>
 
 MACRO ANALYSIS:
 {json.dumps(gpt)}
