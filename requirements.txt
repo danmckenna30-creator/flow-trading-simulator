@@ -6,11 +6,8 @@ numpy
 requests
 plotly
 pytz
-transformers
-torch
+vaderSentiment
 apscheduler
 streamlit-autorefresh
-vaderSentiment
-scipy
 lxml
 beautifulsoup4
