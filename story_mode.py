@@ -11,12 +11,20 @@ def generate_story_mode():
     try:
         df = pd.read_csv("ai_news_output.csv")
 
+        # Convert dates safely
         if "date" in df.columns:
             df["date"] = pd.to_datetime(
                 df["date"],
                 utc=True,
                 errors="coerce"
             )
+
+        # Remove garbage timestamps
+        df = df[df["date"] > datetime(2000, 1, 1, tzinfo=timezone.utc)]
+
+        # HARD CAP: prevent runaway file growth
+        if len(df) > 500:
+            df = df.tail(500)
 
     except Exception as e:
         return f"Could not load ai_news_output.csv: {e}"
@@ -32,8 +40,12 @@ def generate_story_mode():
         else:
             recent = df
 
+        # If nothing recent, fallback to last 20
         if recent.empty:
             recent = df.tail(20)
+
+        # CAP recent articles to avoid huge batches
+        recent = recent.tail(50)
 
     except Exception as e:
         return f"News filtering error: {e}"
@@ -57,25 +69,21 @@ def generate_story_mode():
     # -------------------------
     # Build prompt
     # -------------------------
-    cols = [
-        c for c in ["headline", "sentiment", "topic"]
-        if c in recent.columns
-    ]
-
-    headlines_text = "\n".join(recent["headline"].head(3).tolist())
+    headlines_text = "\n".join(
+        recent["headline"].head(3).astype(str).tolist()
+    )
 
     prompt = f"""
 You are a senior macro strategist writing a professional morning note for institutional traders.
 
-Format headings EXACTLY like this:
-
-## Market Tone
-<paragraph here>
+HEADLINES (last 24h):
+{headlines_text}
 
 MACRO ANALYSIS:
 {json.dumps(gpt)}
 
 You MUST output all of the following sections.
+All headings MUST be on their own line. Never place text on the same line as a heading.
 
 ## Market Tone
 Provide one concise paragraph.
@@ -86,8 +94,8 @@ Provide exactly 3 bullet points.
 ## What Drove Sentiment
 Explain the main drivers of market sentiment today.
 
-## Risk 
-Explain Risk Regime and why in 2 sentences
+## Risk
+Explain the risk regime and why in exactly 2 sentences.
 
 ## What To Watch Today
 Provide exactly 3 bullet points covering:
@@ -98,15 +106,16 @@ Provide exactly 3 bullet points covering:
 - Equities
 
 ## The Key Takeaway
-Provide the key takeaway, 3 sentences 
+Provide the key takeaway in 3 sentences.
 
 Style:
 - Bloomberg terminal
 - Professional
-- Concise   
+- Concise
 - No fluff
 - No markdown tables
 """
+
     # -------------------------
     # OpenAI call
     # -------------------------
@@ -118,12 +127,7 @@ Style:
 
         response = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
+            messages=[{"role": "user", "content": prompt}],
             max_tokens=350
         )
 
