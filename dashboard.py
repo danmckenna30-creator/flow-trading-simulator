@@ -641,293 +641,113 @@ with tabs[0]:
 # =========================================================
 
 with tabs[1]:
-
-    st.markdown("### Cross-Asset Risk Monitor")
-
-    # ---------- RISK DATA ----------
-    vix_change = prices.get("VIX", {}).get("change") or 0 or 0
-    spx_change = prices.get("S&P 500", {}).get("change") or 0 or 0
-    usdjpy_change = prices.get("USDJPY", {}).get("change") or 0 or 0
-    oil_change = prices.get("Brent Crude", {}).get("change") or 0 or 0
-    copper_change = prices.get("Copper", {}).get("change") or 0 or 0
-
-    news_sentiment = 0
-    if news_df is not None and "sentiment" in news_df.columns and len(news_df) > 0:
-        news_sentiment = news_df["sentiment"].mean()
-
-    # ---------- RISK SCORE ----------
-    risk_score = 0
-    risk_score += spx_change * 2
-    risk_score += copper_change
-    risk_score += oil_change * 0.5
-    risk_score += usdjpy_change
-    risk_score += news_sentiment * 10
-    risk_score -= vix_change * 2
-
-    if risk_score > 2:
-        risk_label = "RISK-ON"
-        risk_class = "risk-on"
-    elif risk_score < -2:
-        risk_label = "RISK-OFF"
-        risk_class = "risk-off"
-    else:
-        risk_label = "NEUTRAL"
-        risk_class = "neutral"
-
-    score_col1, score_col2 = st.columns([2, 1])
-
-    # ---------- RISK REGIME CARD ----------
-    with score_col1:
+    st.markdown("## 🛡️ Desk Risk & Inventory Monitor")
+    
+    # -----------------------------------------------------------------
+    # SECTION 1: MARKET REGIME GAUGES
+    # -----------------------------------------------------------------
+    st.markdown("### 1. Market Risk & Volatility Backdrop")
+    
+    # Beginner explanation (2-3 sentences)
+    st.markdown(
+        "> **How to read this:** Before taking client flows, a trader must check the market climate. "
+        "High volatility means prices move violently, making it riskier to hold inventory. "
+        "Low volatility suggests stable markets where the desk can safely hold larger positions."
+    )
+    
+    # Extract market data values for the gauges
+    vix_level = prices.get("VIX", {}).get("price", 15.0)
+    vix_change = prices.get("VIX", {}).get("change") or 0
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
         st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.markdown("<div class='label'>Cross-Asset Risk Regime</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='big-number {risk_class}'>{risk_label}</div>", unsafe_allow_html=True)
-        st.markdown(f"<p style='color:#AAAAAA;'>Composite Risk Score: {risk_score:.2f}</p>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    # ---------- VOLATILITY REGIME ----------
-    with score_col2:
-        vix_level = prices.get("VIX", {}).get("price", None)
-
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.markdown("<div class='label'>Volatility Regime</div>", unsafe_allow_html=True)
-
-        if vix_level is not None:
-            if vix_level < 15:
-                vol_regime = "LOW VOL"
-                vol_color = "#00ff88"
-            elif vix_level <= 25:
-                vol_regime = "NORMAL VOL"
-                vol_color = "#FFDC00"
-            else:
-                vol_regime = "HIGH VOL"
-                vol_color = "#ff4d4d"
-
-            st.markdown(f"<div class='big-number' style='color:{vol_color};'>{vol_regime}</div>", unsafe_allow_html=True)
-            st.markdown(f"<p style='color:#AAAAAA;'>VIX: {vix_level}</p>", unsafe_allow_html=True)
+        st.markdown("<div class='label'>Volatility Regime Gauge</div>", unsafe_allow_html=True)
+        if vix_level < 15:
+            st.markdown("<div class='big-number' style='color:#00ff88;'>LOW VOLATILITY</div>", unsafe_allow_html=True)
+        elif vix_level <= 25:
+            st.markdown("<div class='big-number' style='color:#FFDC00;'>NORMAL VOLATILITY</div>", unsafe_allow_html=True)
         else:
-            st.markdown("<div class='big-number'>N/A</div>", unsafe_allow_html=True)
-
+            st.markdown("<div class='big-number' style='color:#ff4d4d;'>HIGH VOLATILITY</div>", unsafe_allow_html=True)
+        st.markdown(f"<p style='color:#AAAAAA;'>VIX Index Level: {vix_level:.2f} ({vix_change:+.2f}%)</p>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown("---")
-
-    # ---------- HEATMAP ----------
-    st.markdown("### Cross-Asset Heatmap")
-
-    heat_assets = ["VIX", "S&P 500", "USDJPY", "Brent Crude", "Copper"]
-    heat_values = []
-
-    for asset in heat_assets:
-        val = prices.get(asset, {}).get("change", 0)
-        heat_values.append(val if val is not None else 0)
-
-    heatmap_fig = go.Figure(
-        data=go.Heatmap(
-            z=[heat_values],
-            x=heat_assets,
-            y=["Daily Move"],
-            text=[[f"{v:.2f}%" for v in heat_values]],
-            texttemplate="%{text}",
-            colorscale="RdYlGn",
+        
+    with col2:
+        # Cross-Asset Heatmap
+        heat_assets = ["VIX", "S&P 500", "USDJPY", "Brent Crude", "Copper"]
+        heat_values = [prices.get(asset, {}).get("change", 0) or 0 for asset in heat_assets]
+        
+        heatmap_fig = go.Figure(
+            data=go.Heatmap(
+                z=[heat_values], x=heat_assets, y=["Daily Move"],
+                text=[[f"{v:+.2f}%" for v in heat_values]], texttemplate="%{text}",
+                colorscale="RdYlGn", showscale=False
+            )
         )
-    )
-
-    heatmap_fig.update_layout(
-        template="plotly_dark",
-        height=250,
-        margin=dict(l=20, r=20, t=40, b=20)
-    )
-
-    st.plotly_chart(heatmap_fig, use_container_width=True, key="risk_heatmap")
+        heatmap_fig.update_layout(template="plotly_dark", height=110, margin=dict(l=10, r=10, t=10, b=10))
+        st.plotly_chart(heatmap_fig, use_container_width=True, key="risk_tab_heatmap")
 
     st.markdown("---")
 
-       # ---------- FX RISK ----------
-    st.markdown("### FX Risk Pairs")
+    # -----------------------------------------------------------------
+    # SECTION 2: INVENTORY & FLOW DESK RISK
+    # -----------------------------------------------------------------
+    st.markdown("### 2. Live Inventory Risk & Limits")
+    
+    # Beginner explanation (2-3 sentences)
+    st.markdown(
+        "> **How to read this:** This is the flow trading simulator's nervous system. "
+        "When clients trade with us, we inherit their risk; if a bar goes too far positive (Long) or negative (Short), "
+        "we breach our **$500k Desk Limit** and must use the Hedge buttons to neutralize our exposure."
+    )
+    
+    # Ensure state is initialized from Tab 4/5 logic
+    init_flow_state()
+    current_inventory = st.session_state.get("inventory", {})
+    
+    # Create an Inventory Risk Bar Chart
+    if current_inventory and any(v != 0 for v in current_inventory.values()):
+        inv_data = pd.DataFrame([
+            {"Asset": asset, "Net Position ($)": amount} 
+            for asset, amount in current_inventory.items()
+        ])
+        
+        # Plotting the inventory bar chart
+        fig_inv = px.bar(
+            inv_data, x="Net Position ($)", y="Asset", orientation="h",
+            title="Desk Net Exposure vs. $500,000 Risk Limit",
+            color="Net Position ($)", color_continuous_scale="RdbU_r",
+            range_x=[-1500000, 1500000]
+        )
+        # Draw dotted lines at our hard trading limits ($500k)
+        fig_inv.add_vline(x=500000, line_dash="dash", line_color="red", annotation_text="Max Long Limit")
+        fig_inv.add_vline(x=-500000, line_dash="dash", line_color="red", annotation_text="Max Short Limit")
+        fig_inv.update_layout(template="plotly_dark", height=250, margin=dict(l=20, r=20, t=40, b=20))
+        st.plotly_chart(fig_inv, use_container_width=True)
+    else:
+        st.info("💡 **Desk Inventory is Flat.** No active risk. Go to the Flow Trading tab to add client flows!")
 
+    # FX Risk Pairs Checklist (Crucial for Flow Traders monitoring liquidity)
+    st.markdown("#### FX Liquidity Risk Pairs")
     fx_pairs = ["USDJPY", "GBPUSD", "EURUSD"]
     fx_cols = st.columns(3)
-
+    
     for i, pair in enumerate(fx_pairs):
         with fx_cols[i]:
-
             item = prices.get(pair, {})
-
+            price = item.get("price", 0.0)
+            change = item.get("change", 0.0)
+            
             st.markdown("<div class='card'>", unsafe_allow_html=True)
             st.markdown(f"<div class='label'>{pair}</div>", unsafe_allow_html=True)
-
-            price = item.get("price")
-            change = item.get("change")
-
-            if price is not None and change is not None:
-
-                # Format price nicely
-                if pair == "USDJPY":
-                    price_str = f"{price:.2f}"
-                else:
-                    price_str = f"{price:.4f}"
-
-                # Colour + arrow
-                if change > 0:
-                    color = "#00ff88"
-                    arrow = "▲"
-                elif change < 0:
-                    color = "#ff4d4d"
-                    arrow = "▼"
-                else:
-                    color = "#ffffff"
-                    arrow = ""
-
-                st.markdown(
-                    f"<div class='big-number'>{price_str}</div>",
-                    unsafe_allow_html=True
-                )
-
-                st.markdown(
-                    f"<div style='font-size:18px; color:{color};'>{arrow} {abs(change):.2f}%</div>",
-                    unsafe_allow_html=True
-                )
-
+            if price:
+                color = "#00ff88" if change >= 0 else "#ff4d4d"
+                st.markdown(f"<div class='big-number'>{price:.4f}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='color:{color};'>{'▲' if change >= 0 else '▼'} {abs(change):.2f}%</div>", unsafe_allow_html=True)
             else:
-                # If missing data
                 st.markdown("<div class='big-number'>N/A</div>", unsafe_allow_html=True)
-
             st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown("---")
-
-        # ---------- AI BUBBLE RISK INDICATOR ----------
-    st.markdown("### AI Bubble Risk")
-
-    # --- 1. Price action & volatility ---
-    nvda = prices.get("NVDA", {}).get("change") or 0
-    soxx = prices.get("SOXX", {}).get("change") or 0
-
-    vol_risk = 0
-    if abs(nvda) > 4 or abs(soxx) > 3:
-        vol_risk = 2
-    elif abs(nvda) > 2 or abs(soxx) > 1.5:
-        vol_risk = 1
-
-    # --- 2. Breadth ---
-    spx = prices.get("S&P 500", {}).get("change") or 0
-    rsp = prices.get("RSP", {}).get("change") or 0
-    breadth_gap = spx - rsp
-
-    breadth_risk = 0
-    if breadth_gap > 1.5:
-        breadth_risk = 2
-    elif breadth_gap > 0.7:
-        breadth_risk = 1
-
-    # --- 3. SOXX/SPX ratio ---
-    soxx_spx_ratio = soxx - spx
-    ratio_risk = 0
-    if soxx_spx_ratio > 2:
-        ratio_risk = 2
-    elif soxx_spx_ratio > 1:
-        ratio_risk = 1
-
-    # --- 4. AI sentiment ---
-    if news_df is not None and "headline" in news_df.columns and len(news_df) > 0:
-        ai_news = news_df[
-            news_df["headline"].str.contains(
-                "AI|artificial intelligence|chip|GPU|Nvidia|semiconductor|OpenAI",
-                case=False, na=False
-            )
-        ]
-        ai_sent = ai_news["sentiment"].mean() if len(ai_news) > 0 else 0
-    else:
-        ai_sent = 0
-
-    sentiment_risk = 0
-    if ai_sent > 0.35:
-        sentiment_risk = 2
-    elif ai_sent > 0.15:
-        sentiment_risk = 1
-
-    # --- 5. AI hype trend (7-day) ---
-    trend_risk = 0
-    if len(ai_hype_df) >= 7:
-        last7 = ai_hype_df.tail(7)["count"].sum()
-        prev7 = ai_hype_df.tail(14).head(7)["count"].sum() if len(ai_hype_df) >= 14 else 0
-
-        if last7 > prev7 * 1.5:
-            trend_risk = 2
-        elif last7 > prev7 * 1.2:
-            trend_risk = 1
-
-    # --- Final score ---
-    ai_bubble_score = vol_risk + breadth_risk + ratio_risk + sentiment_risk + trend_risk
-    ai_bubble_score = min(ai_bubble_score, 5)
-
-    # --- Label & color ---
-    if ai_bubble_score >= 4:
-        label = "HIGH"
-        color = "#FF4136"
-    elif ai_bubble_score >= 2:
-        label = "MEDIUM"
-        color = "#FFDC00"
-    else:
-        label = "LOW"
-        color = "#00FF41"
-
-    # --- Visual hype meter ---
-    meter_blocks = int(ai_bubble_score)
-    meter = "█" * meter_blocks + "░" * (5 - meter_blocks)
-
-    st.markdown(
-        f"<h4 style='color:{color};'>AI Bubble Risk: {label} ({ai_bubble_score}/5)</h4>",
-        unsafe_allow_html=True
-    )
-    st.markdown(
-        f"<pre style='color:{color}; font-size:18px;'>[{meter}]</pre>",
-        unsafe_allow_html=True
-    )
-
-    # --- Narrative ---
-    if label == "HIGH":
-        st.markdown(
-            "AI‑linked markets show signs of overheating. Semiconductor momentum, narrow breadth, "
-            "and rising AI‑themed sentiment point to bubble‑like conditions."
-        )
-    elif label == "MEDIUM":
-        st.markdown(
-            "AI enthusiasm is elevated. Semiconductor strength and increasing AI‑related headlines "
-            "suggest growing optimism, but not yet extreme froth."
-        )
-    else:
-        st.markdown(
-            "AI‑related market activity appears healthy, with balanced sentiment and no major signs "
-            "of speculative excess."
-        )
-
-   
-
-    # ---------- GPT COMMENTARY ----------
-    st.markdown("### GPT Risk Commentary")
-
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-
-    if gpt and "summary" in gpt:
-        st.markdown(
-            f"""
-            <p style='color:#DDDDDD;'>
-            Markets are currently exhibiting a <b>{risk_label}</b> tone across
-            equities, volatility, FX, and commodities. Current macro positioning
-            suggests investors remain focused on cross-asset risk transmission,
-            volatility dynamics, and geopolitical headlines.
-            </p>
-            """,
-            unsafe_allow_html=True
-        )
-    else:
-        st.markdown(
-            "<p style='color:#AAAAAA;'>No GPT risk commentary available.</p>",
-            unsafe_allow_html=True
-        )
-
-    st.markdown("</div>", unsafe_allow_html=True)
 # =========================================================
 # =================== COMMODITIES TAB =====================
 # =========================================================
