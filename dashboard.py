@@ -443,7 +443,7 @@ with tabs[0]:
     gpt = load_gpt()
     ai_hype_df = load_ai_hype_history()
 
-    col1, col2, col3, col4 = st.columns()
+    col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         st.markdown("<div class='card'>", unsafe_allow_html=True)
@@ -537,7 +537,7 @@ with tabs[0]:
 
     st.markdown("---")
 
-    bottom_left, bottom_right = st.columns()
+    bottom_left, bottom_right = st.columns(2)
 
     with bottom_left:
         st.markdown("### Latest Headlines")
