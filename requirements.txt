@@ -11,3 +11,5 @@ apscheduler
 streamlit-autorefresh
 lxml
 beautifulsoup4
+gspread
+google-auth

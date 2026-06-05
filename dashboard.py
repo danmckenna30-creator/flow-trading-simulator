@@ -91,14 +91,14 @@ st.markdown(BLOOMBERG_CSS, unsafe_allow_html=True)
 # ---------- LOAD DATA ----------
 def load_news():
     try:
-        df = pd.read_csv("ai_news_output.csv")
-        if "date" in df.columns:
-            df["date"] = pd.to_datetime(df["date"], errors="coerce")
-        return df
+        from sheets_db import load_news_from_sheets
+        return load_news_from_sheets()
     except Exception:
         return None
 
 def load_gpt():
+    if "gpt_analysis" in st.session_state:
+        return st.session_state["gpt_analysis"]
     try:
         with open("gpt_analysis.json", "r") as f:
             return json.load(f)
