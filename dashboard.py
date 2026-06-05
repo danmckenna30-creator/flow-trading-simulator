@@ -494,29 +494,18 @@ with tabs[0]:
 
     # ---------- STORY MODE ----------
     st.markdown("### Morning Macro Brief")
-    
-    import story_mode
-    import os
 
-    # DEBUG: show the actual CSV path Streamlit is reading
-    st.write("CSV PATH:", os.path.abspath("ai_news_output.csv"))
-
-    st.session_state["story_text"] = story_mode.generate_story_mode()
+    if "story_text" not in st.session_state:
+        try:
+            from story_mode import generate_story_mode
+            st.session_state["story_text"] = generate_story_mode()
+        except Exception as e:
+            st.session_state["story_text"] = f"Story mode error: {e}"
 
     story_text = st.session_state.get("story_text", "No story mode brief generated yet.")
+    st.markdown(story_text)
 
-    st.markdown(
-        f"""
-        <div class='card' style='white-space: pre-wrap; line-height: 1.4;'>
-        <p style='color:#DDDDDD;'>{story_text}</p>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-with st.sidebar:
-    st.markdown("## Story Mode")
-
-    if st.button("Regenerate Morning Brief"):
+    if st.button("🔄 Regenerate Morning Brief"):
         try:
             from story_mode import generate_story_mode
             st.session_state["story_text"] = generate_story_mode()
