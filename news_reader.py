@@ -118,7 +118,13 @@ def fetch_all_sources():
 # --- Processing ---
 def process_all_news(existing_df=None):
     articles = fetch_all_sources()
-    seen_ids = get_seen_ids(existing_df)
+    # Only deduplicate against real news rows (must have a headline)
+    if existing_df is not None and "headline" in existing_df.columns:
+        real_rows = existing_df[existing_df["headline"].str.strip() != "Test headline"]
+        seen_ids = get_seen_ids(real_rows)
+    else:
+        seen_ids = set()
+    print(f"[Pipeline] {len(articles)} fetched, {len(seen_ids)} already seen.")
     results = []
     for article in articles:
         aid = article_id(article)
@@ -132,6 +138,7 @@ def process_all_news(existing_df=None):
             results.append(analysis)
         except Exception as e:
             print(f"[Processing error] {e}")
+    print(f"[Pipeline] {len(results)} new articles to save.")
     return results
 
 # --- GPT Analysis ---
