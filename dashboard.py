@@ -430,7 +430,7 @@ def extract_commodity_themes(news):
 # ====================== MACRO TAB ========================
 # =========================================================
 
-with tabs:
+with tabs[0]:
     st_autorefresh(interval=60 * 60 * 1000, key="macro_refresh")
 
     with st.spinner("Fetching latest news and sentiment..."):
@@ -653,7 +653,7 @@ with tabs:
 # ======================= RISK TAB ========================
 # =========================================================
 
-with tabs:
+with tabs[1]:
     st.markdown("## 🛡️ Desk Risk & Inventory Monitor")
     
     # -----------------------------------------------------------------
@@ -758,7 +758,7 @@ with tabs:
 # =================== COMMODITIES TAB =====================
 # =========================================================
 
-with tabs:
+with tabs[2]:
     st.markdown("### Commodities")
     commodity_names = ["Brent Crude", "WTI Crude", "Natural Gas", "Gold", "Silver", "Copper", "Corn", "Wheat"]
     cols = st.columns(4)
@@ -864,7 +864,7 @@ with tabs:
 # ======================= S&P500 TAB =======================
 # =========================================================
 
-with tabs:
+with tabs[3]:
     render_sp500_tab()
 
 
@@ -872,5 +872,5 @@ with tabs:
 # =================== FLOW TRADING TAB ====================
 # =========================================================
 
-with tabs:
+with tabs[4]:
     render_flow_trading_tab()
