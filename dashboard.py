@@ -500,7 +500,7 @@ with tabs[0]:
     st.markdown("")
 
     st.markdown("### Macro Analyst View")
-    left, right = st.columns()
+    left, right = st.columns(2)
 
     with left:
         st.markdown("<div class='card'>", unsafe_allow_html=True)
