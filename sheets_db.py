@@ -22,7 +22,6 @@ COLUMNS = ["id", "date", "source", "headline", "sentiment",
            "relevance", "topic", "escalate"]
 
 
-@st.cache_resource
 def get_sheet():
     """Connect to Google Sheets using service account credentials from Streamlit secrets."""
     try:
@@ -41,35 +40,19 @@ def get_sheet():
         return None
 
 
-def load_news_from_sheets():
+def load_news_from_sheets() -> pd.DataFrame | None:
     """Load last 24 hours of news from Google Sheets."""
     ws = get_sheet()
     if ws is None:
         return None
     try:
-        all_values = ws.get_all_values()
-        print(f"[Sheets] Raw rows in sheet: {len(all_values)}")
-
-        if len(all_values) <= 1:
-            # Only header row or empty
-            print("[Sheets] Sheet has no data rows yet.")
+        records = ws.get_all_records()
+        if not records:
             return None
-
-        # First row is header
-        headers = all_values[0]
-        rows = all_values[1:]
-        df = pd.DataFrame(rows, columns=headers)
-
-        # Drop completely empty rows
-        df = df[df["headline"].str.strip() != ""]
-
-        if df.empty:
-            return None
-
+        df = pd.DataFrame(records)
         df["date"] = pd.to_datetime(df["date"], utc=True, errors="coerce")
         cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
         df = df[df["date"] >= cutoff]
-        print(f"[Sheets] Loaded {len(df)} articles from last 24h.")
         return df if not df.empty else None
     except Exception as e:
         print(f"[Sheets] Load error: {e}")
