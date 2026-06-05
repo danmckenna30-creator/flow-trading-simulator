@@ -161,9 +161,11 @@ def run_pipeline():
         # Run GPT analysis on most relevant
         run_gpt_analysis(new_results)
 
-        # Generate story mode
+        # Generate story mode — pass data directly, no file reads needed
         try:
-            story = generate_story_mode()
+            fresh_df = load_news_from_sheets()
+            gpt_data = st.session_state.get("gpt_analysis", None)
+            story = generate_story_mode(news_df=fresh_df, gpt_analysis=gpt_data)
             st.session_state["story_text"] = story
         except Exception as e:
             print(f"[Story mode error] {e}")
