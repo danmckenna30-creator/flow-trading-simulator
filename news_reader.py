@@ -150,6 +150,11 @@ def run_pipeline():
     # Load existing data to check for duplicates
     existing_df = load_news_from_sheets()
 
+    # If sheet is empty, clear seen IDs so we force-add all current articles
+    if existing_df is None or len(existing_df) == 0:
+        print("[Pipeline] Sheet is empty — forcing full fetch.")
+        existing_df = None
+
     # Fetch and process only new articles
     new_results = process_all_news(existing_df)
 
@@ -161,11 +166,9 @@ def run_pipeline():
         # Run GPT analysis on most relevant
         run_gpt_analysis(new_results)
 
-        # Generate story mode — pass data directly, no file reads needed
+        # Generate story mode
         try:
-            fresh_df = load_news_from_sheets()
-            gpt_data = st.session_state.get("gpt_analysis", None)
-            story = generate_story_mode(news_df=fresh_df, gpt_analysis=gpt_data)
+            story = generate_story_mode()
             st.session_state["story_text"] = story
         except Exception as e:
             print(f"[Story mode error] {e}")

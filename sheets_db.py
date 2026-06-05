@@ -26,47 +26,50 @@ COLUMNS = ["id", "date", "source", "headline", "sentiment",
 def get_sheet():
     """Connect to Google Sheets using service account credentials from Streamlit secrets."""
     try:
-        # Check secrets exist
-        all_keys = list(st.secrets.keys())
-        print(f"[Sheets] Available secret keys: {all_keys}")
-
-        if "gcp_service_account" not in st.secrets:
-            print("[Sheets] ERROR: gcp_service_account not found in secrets!")
-            print(f"[Sheets] Available keys are: {all_keys}")
-            return None
-
         creds_dict = dict(st.secrets["gcp_service_account"])
-        print(f"[Sheets] GCP credential keys: {list(creds_dict.keys())}")
-
         creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
         gc = gspread.authorize(creds)
-        print(f"[Sheets] Authorized OK, opening sheet: {SHEET_NAME}")
         sh = gc.open(SHEET_NAME)
         try:
             ws = sh.worksheet(TAB_NAME)
         except gspread.WorksheetNotFound:
             ws = sh.add_worksheet(title=TAB_NAME, rows=5000, cols=len(COLUMNS))
-            ws.append_row(COLUMNS)
-        print(f"[Sheets] Connected to worksheet: {TAB_NAME}")
+            ws.append_row(COLUMNS)  # add header
         return ws
     except Exception as e:
-        print(f"[Sheets] Connection error: {type(e).__name__}: {e}")
+        print(f"[Sheets] Connection error: {e}")
         return None
 
 
-def load_news_from_sheets() -> pd.DataFrame | None:
+def load_news_from_sheets():
     """Load last 24 hours of news from Google Sheets."""
     ws = get_sheet()
     if ws is None:
         return None
     try:
-        records = ws.get_all_records()
-        if not records:
+        all_values = ws.get_all_values()
+        print(f"[Sheets] Raw rows in sheet: {len(all_values)}")
+
+        if len(all_values) <= 1:
+            # Only header row or empty
+            print("[Sheets] Sheet has no data rows yet.")
             return None
-        df = pd.DataFrame(records)
+
+        # First row is header
+        headers = all_values[0]
+        rows = all_values[1:]
+        df = pd.DataFrame(rows, columns=headers)
+
+        # Drop completely empty rows
+        df = df[df["headline"].str.strip() != ""]
+
+        if df.empty:
+            return None
+
         df["date"] = pd.to_datetime(df["date"], utc=True, errors="coerce")
         cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
         df = df[df["date"] >= cutoff]
+        print(f"[Sheets] Loaded {len(df)} articles from last 24h.")
         return df if not df.empty else None
     except Exception as e:
         print(f"[Sheets] Load error: {e}")
