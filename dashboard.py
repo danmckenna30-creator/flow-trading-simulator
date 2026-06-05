@@ -292,8 +292,43 @@ with tabs[0]:
     with st.spinner("Fetching latest news and sentiment..."):
         try:
             run_pipeline()
+            st.success("Pipeline ran OK")
         except Exception as e:
-            st.warning(f"Pipeline error: {e}")
+            st.error(f"Pipeline error: {e}")
+
+    # Debug panel — remove once working
+    with st.expander("🔧 Debug Info", expanded=True):
+        import os, requests as _req, streamlit as _st
+        # Check API key
+        try:
+            key = _st.secrets.get("NEWSAPI_KEY") or _st.secrets.get("NEWS_API_KEY") or ""
+            st.write(f"NewsAPI key found: {'✅ Yes' if key else '❌ No'} (length: {len(key)})")
+        except Exception as e:
+            st.write(f"Secret error: {e}")
+
+        # Test NewsAPI directly
+        try:
+            key = _st.secrets.get("NEWSAPI_KEY") or _st.secrets.get("NEWS_API_KEY") or ""
+            r = _req.get(f"https://newsapi.org/v2/top-headlines?category=business&language=en&pageSize=5&apiKey={key}", timeout=10)
+            data = r.json()
+            st.write(f"NewsAPI status: {data.get('status')} | Articles: {len(data.get('articles', []))} | Message: {data.get('message', 'none')}")
+        except Exception as e:
+            st.write(f"NewsAPI test error: {e}")
+
+        # Check Sheets connection
+        try:
+            from sheets_db import get_sheet
+            ws = get_sheet()
+            st.write(f"Google Sheets: {'✅ Connected' if ws else '❌ Failed'}")
+            if ws:
+                records = ws.get_all_records()
+                st.write(f"Rows in sheet: {len(records)}")
+        except Exception as e:
+            st.write(f"Sheets error: {e}")
+
+        # Check session state
+        st.write(f"news_df rows: {len(news_df) if news_df is not None else 'None'}")
+        st.write(f"gpt_analysis in session: {'gpt_analysis' in st.session_state}")
 
     # Reload after pipeline runs
     news_df = load_news()
