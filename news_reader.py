@@ -21,15 +21,14 @@ def vader_sentiment(text):
 
 # --- Secrets ---
 try:
-    NEWSAPI_KEY = st.secrets.get("NEWSAPI_KEY") or st.secrets.get("NEWS_API_KEY") or ""
+    GNEWS_KEY = st.secrets.get("GNEWS_API_KEY") or os.environ.get("GNEWS_API_KEY", "")
 except Exception:
-    NEWSAPI_KEY = os.environ.get("NEWSAPI_KEY", "")
-if not NEWSAPI_KEY:
-    print("[Warning] NEWSAPI_KEY not found.")
+    GNEWS_KEY = os.environ.get("GNEWS_API_KEY", "")
+if not GNEWS_KEY:
+    print("[Warning] GNEWS_API_KEY not found.")
 
-# --- Deduplication (in-memory for 24h window) ---
-def get_seen_ids(df: pd.DataFrame) -> set:
-    """Get IDs already in the sheet to avoid duplicates."""
+# --- Deduplication ---
+def get_seen_ids(df):
     if df is None or "id" not in df.columns:
         return set()
     return set(df["id"].dropna().astype(str).tolist())
@@ -76,18 +75,20 @@ def process_headline(headline):
         "escalate":  should_escalate(sentiment, relevance)
     }
 
-# --- News Fetching (last 24h only) ---
-def fetch_newsapi():
+# --- News Fetching via GNews ---
+def fetch_gnews():
+    """
+    GNews API — free tier allows 100 requests/day, works from Streamlit Cloud.
+    """
     try:
         url = (
-            "https://newsapi.org/v2/top-headlines"
-            f"?category=business&language=en&pageSize=100&apiKey={NEWSAPI_KEY}"
+            "https://gnews.io/api/v4/top-headlines"
+            f"?category=business&lang=en&max=10&apikey={GNEWS_KEY}"
         )
         resp = requests.get(url, timeout=10)
         resp.raise_for_status()
         data = resp.json()
 
-        # Filter to articles published in the last 24 hours
         cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
         articles = []
         for a in data.get("articles", []):
@@ -100,19 +101,23 @@ def fetch_newsapi():
             except Exception:
                 pass
             articles.append({
-                "source":   a["source"]["name"],
+                "source":   a.get("source", {}).get("name", "Unknown"),
                 "headline": a["title"],
                 "date":     a["publishedAt"],
                 "url":      a.get("url", "")
             })
+        print(f"[GNews] Fetched {len(articles)} articles.")
         return articles
     except Exception as e:
-        print(f"[NewsAPI error] {e}")
+        print(f"[GNews error] {e}")
         return []
+
+def fetch_all_sources():
+    return fetch_gnews()
 
 # --- Processing ---
 def process_all_news(existing_df=None):
-    articles = fetch_newsapi()
+    articles = fetch_all_sources()
     seen_ids = get_seen_ids(existing_df)
     results = []
     for article in articles:
@@ -139,7 +144,7 @@ def run_gpt_analysis(results):
         gpt_output = call_gpt(relevant)
         if gpt_output:
             st.session_state["gpt_analysis"] = gpt_output
-            print(f"GPT analysis saved to session state.")
+            print("GPT analysis saved to session state.")
     except Exception as e:
         print(f"[GPT error] {e}")
 
@@ -147,28 +152,22 @@ def run_gpt_analysis(results):
 def run_pipeline():
     print("Fetching and processing news...")
 
-    # Load existing data to check for duplicates
     existing_df = load_news_from_sheets()
 
-    # If sheet is empty, clear seen IDs so we force-add all current articles
     if existing_df is None or len(existing_df) == 0:
         print("[Pipeline] Sheet is empty — forcing full fetch.")
         existing_df = None
 
-    # Fetch and process only new articles
     new_results = process_all_news(existing_df)
 
     if new_results:
-        # Save to Google Sheets
         save_news_to_sheets(new_results)
         print(f"Saved {len(new_results)} new articles.")
-
-        # Run GPT analysis on most relevant
         run_gpt_analysis(new_results)
-
-        # Generate story mode
         try:
-            story = generate_story_mode()
+            fresh_df = load_news_from_sheets()
+            gpt_data = st.session_state.get("gpt_analysis", None)
+            story = generate_story_mode(news_df=fresh_df, gpt_analysis=gpt_data)
             st.session_state["story_text"] = story
         except Exception as e:
             print(f"[Story mode error] {e}")

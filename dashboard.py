@@ -319,15 +319,17 @@ with tabs[0]:
 
         # Pipeline test
         try:
-            from news_reader import fetch_newsapi, process_all_news, save_news_to_sheets
-            articles = fetch_newsapi()
-            st.write(f"NewsAPI articles fetched: {len(articles)}")
+            from news_reader import fetch_gnews, process_all_news
+            from sheets_db import save_news_to_sheets as _save
+            articles = fetch_gnews()
+            st.write(f"GNews articles fetched: {len(articles)}")
+            if articles:
+                st.write(f"Sample: {articles[0]['headline'][:80]}")
             results = process_all_news(None)
             st.write(f"Processed articles: {len(results)}")
             if results:
-                from sheets_db import save_news_to_sheets as _save
                 _save(results)
-                st.write("✅ Save attempted")
+                st.write("✅ Save to Sheets attempted")
         except Exception as e:
             st.error(f"Pipeline test error: {e}")
 
