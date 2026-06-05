@@ -293,45 +293,7 @@ with tabs[0]:
         try:
             run_pipeline()
         except Exception as e:
-            st.error(f"Pipeline error: {e}")
-
-    # Debug panel
-    with st.expander("🔧 Debug", expanded=True):
-        # Direct sheet write test
-        try:
-            from sheets_db import get_sheet
-            ws = get_sheet()
-            if ws:
-                st.write(f"✅ Sheet connected")
-                # Try writing a test row directly
-                try:
-                    ws.append_row(["test_id","2024-01-01","TestSource","Test headline",0.1,0.1,"other","False"])
-                    st.write("✅ Test write succeeded — check your Google Sheet!")
-                    # Clean it up
-                    all_vals = ws.get_all_values()
-                    st.write(f"Total rows including header: {len(all_vals)}")
-                except Exception as we:
-                    st.error(f"❌ Write failed: {we}")
-            else:
-                st.error("❌ Sheet not connected")
-        except Exception as e:
-            st.error(f"Sheets error: {e}")
-
-        # Pipeline test
-        try:
-            from news_reader import fetch_gnews, process_all_news
-            from sheets_db import save_news_to_sheets as _save
-            articles = fetch_gnews()
-            st.write(f"GNews articles fetched: {len(articles)}")
-            if articles:
-                st.write(f"Sample: {articles[0]['headline'][:80]}")
-            results = process_all_news(None)
-            st.write(f"Processed articles: {len(results)}")
-            if results:
-                _save(results)
-                st.write("✅ Save to Sheets attempted")
-        except Exception as e:
-            st.error(f"Pipeline test error: {e}")
+            st.warning(f"Pipeline error: {e}")
 
     # Reload after pipeline runs
     news_df = load_news()

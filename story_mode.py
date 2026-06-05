@@ -4,52 +4,72 @@ from datetime import datetime, timedelta, timezone
 from gpt_layer import _get_client
 
 
-def generate_story_mode(news_df=None, gpt_analysis=None):
-    """
-    Generate a Bloomberg-style morning brief.
-    Accepts news_df and gpt_analysis directly so it works on
-    Streamlit Cloud without needing files on disk.
-    """
-
-    # --- Load news data ---
-    if news_df is None:
-        try:
-            from sheets_db import load_news_from_sheets
-            news_df = load_news_from_sheets()
-        except Exception as e:
-            return f"Could not load news data: {e}"
-
-    if news_df is None or news_df.empty:
-        return "No news data available yet — pipeline may still be running."
-
-    # --- Filter to last 24h ---
+def generate_story_mode():
+    # Load news data
+    # -------------------------
     try:
-        if "date" in news_df.columns:
-            news_df["date"] = pd.to_datetime(news_df["date"], utc=True, errors="coerce")
-            cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-            recent = news_df[news_df["date"] >= cutoff]
-            if recent.empty:
-                recent = news_df.tail(20)
-        else:
-            recent = news_df.tail(20)
-        recent = recent.tail(50)
-    except Exception as e:
-        recent = news_df.tail(20)
+        df = pd.read_csv("ai_news_output.csv")
 
-    # --- Load GPT analysis ---
-    if gpt_analysis is None:
-        import streamlit as st
-        gpt_analysis = st.session_state.get("gpt_analysis", {
+        # Convert dates safely
+        if "date" in df.columns:
+            df["date"] = pd.to_datetime(
+                df["date"],
+                utc=True,
+                errors="coerce"
+            )
+
+        # Remove garbage timestamps
+        df = df[df["date"] > datetime(2000, 1, 1, tzinfo=timezone.utc)]
+
+        # HARD CAP: prevent runaway file growth
+        if len(df) > 500:
+            df = df.tail(500)
+
+    except Exception as e:
+        return f"Could not load ai_news_output.csv: {e}"
+
+    # -------------------------
+    # Filter recent headlines
+    # -------------------------
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+
+        if "date" in df.columns:
+            recent = df[df["date"] >= cutoff]
+        else:
+            recent = df
+
+        # If nothing recent, fallback to last 20
+        if recent.empty:
+            recent = df.tail(20)
+
+        # CAP recent articles to avoid huge batches
+        recent = recent.tail(50)
+
+    except Exception as e:
+        return f"News filtering error: {e}"
+
+    # -------------------------
+    # Load macro analysis
+    # -------------------------
+    try:
+        with open("gpt_analysis.json", "r") as f:
+            gpt = json.load(f)
+
+    except Exception:
+        gpt = {
             "macro_theme": "unknown",
             "summary": "No GPT macro analysis available.",
             "market_impact": "neutral",
             "confidence": 0,
             "key_points": []
-        })
+        }
 
-    # --- Build prompt ---
+    # -------------------------
+    # Build prompt
+    # -------------------------
     headlines_text = "\n".join(
-        recent["headline"].head(10).astype(str).tolist()
+        recent["headline"].head(3).astype(str).tolist()
     )
 
     prompt = f"""
@@ -59,48 +79,58 @@ HEADLINES (last 24h):
 {headlines_text}
 
 MACRO ANALYSIS:
-{json.dumps(gpt_analysis)}
+{json.dumps(gpt)}
 
-Output all of the following sections. All headings on their own line.
+You MUST output all of the following sections.
+All headings MUST be on their own line. Never place text on the same line as a heading.
 
 ## Market Tone
-One concise paragraph.
+Provide one concise paragraph.
 
 ## Key Macro Themes
-Exactly 3 bullet points.
+Provide exactly 3 bullet points.
 
 ## What Drove Sentiment
-Main drivers in 2-3 sentences.
+Explain the main drivers of market sentiment today.
 
-## Risk Regime
-Risk-on / risk-off / neutral and why in 2 sentences.
+## Risk
+Explain the risk regime and why in exactly 2 sentences.
 
 ## What To Watch Today
-3 bullet points covering economic data, central banks, and markets.
+Provide exactly 3 bullet points covering:
+- Economic data
+- Central banks
+- Commodities
+- Rates
+- Equities
 
-## Key Takeaway
-3 sentences max.
+## The Key Takeaway
+Provide the key takeaway in 3 sentences.
 
-Style: Bloomberg terminal, professional, concise, no fluff.
+Style:
+- Bloomberg terminal
+- Professional
+- Concise
+- No fluff
+- No markdown tables
 """
 
-    # --- Call GPT ---
+    # -------------------------
+    # OpenAI call
+    # -------------------------
     try:
         client = _get_client()
+
         if client is None:
-            return "OpenAI key not available — check Streamlit secrets."
+            return "DEBUG: _get_client() returned None"
 
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=400,
-            temperature=0.3
+            max_tokens=350
         )
+
         return response.choices[0].message.content
 
     except Exception as e:
-        return f"Story mode error: {e}"
-
-
-if __name__ == "__main__":
-    print(generate_story_mode())
+        return f"DEBUG ERROR: {e}"
