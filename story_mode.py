@@ -4,60 +4,46 @@ from datetime import datetime, timedelta, timezone
 from gpt_layer import _get_client
 
 
-def generate_story_mode():
-    # Load news data
-    # -------------------------
+def generate_story_mode(news_df=None, gpt_analysis=None):
+    """
+    Generate a Bloomberg-style morning brief.
+    Accepts data directly so it works without any files on disk.
+    """
+    # --- Load news from Sheets if not passed in ---
+    if news_df is None:
+        try:
+            from sheets_db import load_news_from_sheets
+            news_df = load_news_from_sheets()
+        except Exception as e:
+            return f"Could not load news data: {e}"
+
+    if news_df is None or (hasattr(news_df, 'empty') and news_df.empty):
+        return "No news data available yet — pipeline may still be running."
+
+    # --- Filter to last 24h ---
     try:
-        df = pd.read_csv("ai_news_output.csv")
-
-        # Convert dates safely
-        if "date" in df.columns:
-            df["date"] = pd.to_datetime(
-                df["date"],
-                utc=True,
-                errors="coerce"
-            )
-
-        # Remove garbage timestamps
-        df = df[df["date"] > datetime(2000, 1, 1, tzinfo=timezone.utc)]
-
-        # HARD CAP: prevent runaway file growth
-        if len(df) > 500:
-            df = df.tail(500)
-
-    except Exception as e:
-        return f"Could not load ai_news_output.csv: {e}"
-
-    # -------------------------
-    # Filter recent headlines
-    # -------------------------
-    try:
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-
-        if "date" in df.columns:
-            recent = df[df["date"] >= cutoff]
+        if "date" in news_df.columns:
+            news_df["date"] = pd.to_datetime(news_df["date"], utc=True, errors="coerce")
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+            recent = news_df[news_df["date"] >= cutoff]
+            if recent.empty:
+                recent = news_df.tail(20)
         else:
-            recent = df
-
-        # If nothing recent, fallback to last 20
-        if recent.empty:
-            recent = df.tail(20)
-
-        # CAP recent articles to avoid huge batches
+            recent = news_df.tail(20)
         recent = recent.tail(50)
-
-    except Exception as e:
-        return f"News filtering error: {e}"
-
-    # -------------------------
-    # Load macro analysis
-    # -------------------------
-    try:
-        with open("gpt_analysis.json", "r") as f:
-            gpt = json.load(f)
-
     except Exception:
-        gpt = {
+        recent = news_df.tail(20)
+
+    # --- Load GPT analysis ---
+    if gpt_analysis is None:
+        try:
+            import streamlit as st
+            gpt_analysis = st.session_state.get("gpt_analysis", {})
+        except Exception:
+            gpt_analysis = {}
+
+    if not gpt_analysis:
+        gpt_analysis = {
             "macro_theme": "unknown",
             "summary": "No GPT macro analysis available.",
             "market_impact": "neutral",
@@ -65,12 +51,10 @@ def generate_story_mode():
             "key_points": []
         }
 
-    # -------------------------
-    # Build prompt
-    # -------------------------
+    # --- Build prompt ---
     headlines_text = "\n".join(
-        recent["headline"].head(3).astype(str).tolist()
-    )
+        recent["headline"].head(10).astype(str).tolist()
+    ) if "headline" in recent.columns else "No headlines available."
 
     prompt = f"""
 You are a senior macro strategist writing a professional morning note for institutional traders.
@@ -79,58 +63,48 @@ HEADLINES (last 24h):
 {headlines_text}
 
 MACRO ANALYSIS:
-{json.dumps(gpt)}
+{json.dumps(gpt_analysis)}
 
 You MUST output all of the following sections.
-All headings MUST be on their own line. Never place text on the same line as a heading.
+All headings MUST be on their own line.
 
 ## Market Tone
-Provide one concise paragraph.
+One concise paragraph.
 
 ## Key Macro Themes
-Provide exactly 3 bullet points.
+Exactly 3 bullet points.
 
 ## What Drove Sentiment
-Explain the main drivers of market sentiment today.
+Main drivers in 2-3 sentences.
 
 ## Risk
-Explain the risk regime and why in exactly 2 sentences.
+Risk regime and why in 2 sentences.
 
 ## What To Watch Today
-Provide exactly 3 bullet points covering:
-- Economic data
-- Central banks
-- Commodities
-- Rates
-- Equities
+3 bullet points covering economic data, central banks, and markets.
 
 ## The Key Takeaway
-Provide the key takeaway in 3 sentences.
+3 sentences max.
 
-Style:
-- Bloomberg terminal
-- Professional
-- Concise
-- No fluff
-- No markdown tables
+Style: Bloomberg terminal, professional, concise, no fluff, no markdown tables.
 """
 
-    # -------------------------
-    # OpenAI call
-    # -------------------------
     try:
         client = _get_client()
-
         if client is None:
-            return "DEBUG: _get_client() returned None"
+            return "OpenAI key not available — check Streamlit secrets."
 
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=350
+            max_tokens=400,
+            temperature=0.3
         )
-
         return response.choices[0].message.content
 
     except Exception as e:
-        return f"DEBUG ERROR: {e}"
+        return f"Story mode error: {e}"
+
+
+if __name__ == "__main__":
+    print(generate_story_mode())
