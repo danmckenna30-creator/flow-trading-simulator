@@ -635,126 +635,43 @@ with tabs[0]:
             st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("### Yield Curve")
-    st.caption("The yield curve shows what interest rate the US government pays to borrow money at different time horizons. Its shape is one of the most watched signals in finance — it tells us what the market expects for growth, inflation, and recession risk.")
-
     curve = get_yield_curve()
-    maturities    = ["2Y", "5Y", "10Y", "30Y"]
-    yields        = [curve[m] for m in maturities]
-    normal_yields = [2.5, 2.8, 3.0, 3.2]
+    maturities = ["2Y", "5Y", "10Y", "30Y"]
+    yields = [curve[m] for m in maturities]
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=maturities, y=yields, mode="lines+markers",
+            line=dict(color="#00c3ff", width=3),
+            marker=dict(size=10, color="#ffffff", line=dict(width=2, color="#00c3ff")),
+        )
+    )
+    fig.update_layout(
+        template="plotly_dark", height=350, margin=dict(l=40, r=40, t=40, b=40),
+        xaxis_title="Maturity", yaxis_title="Yield (%)",
+        xaxis=dict(showgrid=False), yaxis=dict(showgrid=True, gridcolor="#333333"),
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
     slope_2s10s = curve["10Y"] - curve["2Y"]
     slope_5s30s = curve["30Y"] - curve["5Y"]
-    is_inverted = slope_2s10s < 0
 
-    if slope_2s10s > 0.5:
-        curve_shape, shape_color = "STEEP",    "#00ff88"
-        shape_meaning = "Strong growth expectations — long-term borrowing costs well above short-term. Historically positive for banks and risk assets."
-    elif slope_2s10s > 0:
-        curve_shape, shape_color = "NORMAL",   "#FFDC00"
-        shape_meaning = "Slightly positive slope — markets broadly comfortable with the outlook, though not strongly bullish on growth."
-    elif slope_2s10s > -0.25:
-        curve_shape, shape_color = "FLAT",     "#FF8C00"
-        shape_meaning = "Flat curve signals uncertainty — markets unsure whether growth or recession lies ahead. Often precedes inversion."
-    else:
-        curve_shape, shape_color = "INVERTED", "#ff4d4d"
-        shape_meaning = "Inverted — short-term rates above long-term. Has preceded every US recession in the last 50 years."
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.markdown("<div class='label'>2s10s Spread</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='big-number'>{slope_2s10s:.2f} bps</div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    yc1, yc2, yc3, yc4 = st.columns(4)
-    with yc1:
-        st.markdown(f"<div class='card'><div class='label'>Curve Shape</div><div class='big-number' style='color:{shape_color};'>{curve_shape}</div></div>", unsafe_allow_html=True)
-    with yc2:
-        c = "#00ff88" if slope_2s10s > 0 else "#ff4d4d"
-        st.markdown(f"<div class='card'><div class='label'>2s10s Spread</div><div class='big-number' style='color:{c};'>{slope_2s10s:+.2f}%</div><div class='label' style='font-size:10px;'>10Y minus 2Y</div></div>", unsafe_allow_html=True)
-    with yc3:
-        c = "#00ff88" if slope_5s30s > 0 else "#ff4d4d"
-        st.markdown(f"<div class='card'><div class='label'>5s30s Spread</div><div class='big-number' style='color:{c};'>{slope_5s30s:+.2f}%</div><div class='label' style='font-size:10px;'>30Y minus 5Y</div></div>", unsafe_allow_html=True)
-    with yc4:
-        rec_signal = "⚠️ WARNING" if is_inverted else "✅ CLEAR"
-        rec_color  = "#ff4d4d" if is_inverted else "#00ff88"
-        st.markdown(f"<div class='card'><div class='label'>Recession Signal</div><div class='big-number' style='color:{rec_color};'>{rec_signal}</div></div>", unsafe_allow_html=True)
+    with col2:
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.markdown("<div class='label'>5s30s Spread</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='big-number'>{slope_5s30s:.2f} bps</div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown(f"<div class='card' style='color:#DDDDDD; margin-bottom:12px;'>📌 <strong>What this means:</strong> {shape_meaning}</div>", unsafe_allow_html=True)
-
-    fig_yc = go.Figure()
-    fig_yc.add_trace(go.Scatter(
-        x=maturities, y=normal_yields, mode="lines+markers",
-        name="Normal curve (pre-2022)",
-        line=dict(color="#555555", width=2, dash="dash"),
-        marker=dict(size=7, color="#555555"),
-    ))
-    fig_yc.add_trace(go.Scatter(
-        x=maturities, y=yields, mode="lines+markers+text",
-        name="Current curve",
-        line=dict(color="#00c3ff", width=3),
-        marker=dict(size=10, color="#ffffff", line=dict(width=2, color="#00c3ff")),
-        text=[f"{y:.2f}%" for y in yields], textposition="top center"
-    ))
-    fig_yc.add_trace(go.Scatter(
-        x=maturities + maturities[::-1],
-        y=yields + normal_yields[::-1],
-        fill="toself", fillcolor="rgba(0,195,255,0.07)",
-        line=dict(color="rgba(0,0,0,0)"), showlegend=False, hoverinfo="skip"
-    ))
-    fig_yc.update_layout(
-        template="plotly_dark", height=360,
-        margin=dict(l=40, r=40, t=50, b=40),
-        xaxis_title="Maturity", yaxis_title="Yield (%)",
-        xaxis=dict(showgrid=False),
-        yaxis=dict(showgrid=True, gridcolor="#333333"),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        title="US Treasury Yield Curve — Current vs Normal"
-    )
-    st.plotly_chart(fig_yc, use_container_width=True)
-    st.caption("Blue line = today's curve. Grey dashed = typical pre-2022 normal. The shaded area shows deviation from normal. Blue dipping below grey at the short end = Fed has pushed short-term rates unusually high.")
-
-    if is_inverted:
-        st.error("⚠️ Yield curve inverted. 2-year yield above the 10-year. Has preceded every US recession in 50 years. Expect increased demand for gold, USD and bonds, reduced appetite for equities.")
-    st.markdown("---")
-
-    with st.expander("📚 What is the yield curve? (Beginner guide)", expanded=False):
-        st.markdown("""
-**The basics:** Governments borrow by issuing bonds. A 2-year bond = borrow for 2 years. The yield is the interest rate paid.
-
-**Why shape matters:** Normally longer bonds pay higher yields. This creates an upward-sloping normal curve.
-
-**The four shapes:**
-- 🟢 **Steep** — strong growth expected. Good for banks and risk assets.
-- 🟡 **Normal** — standard, moderate growth expected.
-- 🟠 **Flat** — uncertainty. Credit tightens.
-- 🔴 **Inverted** — recession signal. Every US recession since 1970 was preceded by inversion.
-
-**For flow traders:** Inverted/flat curve = more client demand for gold, Treasuries and USD. Less for equities and high-yield bonds.
-        """)
-
-    st.markdown("---")
-    st.markdown("#### 🤖 AI Yield Curve Commentary")
-    st.caption("GPT analyses the current curve shape and what it signals for markets and flow traders.")
-
-    if st.button("🔄 Generate Yield Curve Commentary", key="yield_commentary_btn"):
-        with st.spinner("Analysing yield curve..."):
-            try:
-                from gpt_layer import call_gpt_prose
-                yc_prompt = f"""You are a senior fixed income strategist at a major investment bank.
-
-CURRENT US TREASURY YIELD CURVE:
-- 2Y: {curve["2Y"]:.2f}%, 5Y: {curve["5Y"]:.2f}%, 10Y: {curve["10Y"]:.2f}%, 30Y: {curve["30Y"]:.2f}%
-- 2s10s spread: {slope_2s10s:+.2f}% ({"INVERTED" if is_inverted else "positive"})
-- 5s30s spread: {slope_5s30s:+.2f}%, Shape: {curve_shape}
-
-Write a concise 3-4 sentence commentary covering:
-1. What the current curve shape tells us about growth and inflation expectations
-2. What this means for a flow trader — likely client behaviour today
-3. The single most important thing to watch on the yield curve right now
-
-Bloomberg style. Direct. Plain prose only."""
-
-                yc_commentary = call_gpt_prose(yc_prompt)
-                st.session_state["yield_commentary"] = yc_commentary or "Could not generate commentary."
-            except Exception as e:
-                st.session_state["yield_commentary"] = f"Error: {e}"
-
-    yc_text = st.session_state.get("yield_commentary", "Click above to generate an AI commentary on what the current yield curve signals.")
-    st.markdown(f"<div class='card' style='line-height:1.7; color:#DDDDDD;'>{yc_text}</div>", unsafe_allow_html=True)
+    if slope_2s10s < 0:
+        st.markdown("<p style='color:#ff4d4d; font-weight:bold; font-size:18px;'>⚠️ Yield curve inverted (10-year Treasury yield < 2-year Treasury yield)</p>", unsafe_allow_html=True)
 
 
 # =========================================================
@@ -911,70 +828,6 @@ with tabs[1]:
         st.info("No news data available yet.")
     st.caption("These themes are extracted from today's headlines. Each active theme is a macro risk that could drive client flow — e.g. geopolitical risk pushes clients into gold and out of equities.")
     st.markdown("---")
-
-    # ── SECTION 2: FLOW TRADING RISK ───────────────────────────
-    st.markdown("### 🏦 Section 2 — Flow Trading Risk")
-    st.caption("This mirrors what a junior flow trader at a bank sees. When a client trades, you take the other side and manage the resulting risk. Your inventory shows what you're holding, and the bar chart shows your market exposure.")
-
-    st.markdown("#### Current Inventory Exposure")
-    inv = st.session_state.get("inventory", {})
-
-    if inv and any(v != 0 for v in inv.values()):
-        assets  = list(inv.keys())
-        values  = [inv[a] for a in assets]
-        colours = ["#00ff88" if v > 0 else "#ff4d4d" for v in values]
-        fig_inv = go.Figure(go.Bar(
-            x=assets, y=values, marker_color=colours,
-            text=[f"${abs(v):,.0f}" for v in values], textposition="outside"
-        ))
-        fig_inv.update_layout(
-            template="plotly_dark", height=320,
-            title="Net Inventory (USD)", yaxis_title="Net Position (USD)",
-            margin=dict(l=40,r=40,t=40,b=40),
-            yaxis=dict(gridcolor="#333"), xaxis=dict(showgrid=False)
-        )
-        st.plotly_chart(fig_inv, use_container_width=True)
-        st.caption("Green = long (you profit if price rises). Red = short (you profit if price falls). Good flow traders keep bars close to zero — large bars mean significant market risk if prices move against you.")
-    else:
-        st.info("No open inventory positions. Go to the Flow Trading tab to simulate some client trades — they will appear here.")
-        st.caption("When you accept a client trade in the Flow Trading tab, your inventory updates here in real time. A flow trader's goal is to keep inventory balanced while collecting the bid/offer spread.")
-
-    st.markdown("")
-
-    # P&L Summary
-    st.markdown("#### P&L Summary")
-    pnl       = st.session_state.get("pnl", {"spread_pnl": 0, "hedge_pnl": 0, "inventory_pnl": 0})
-    total_pnl = sum(pnl.values())
-    p1, p2, p3, p4 = st.columns(4)
-    for col, label, key, tip in [
-        (p1, "Spread P&L",    "spread_pnl",    "Earned from bid/offer on every client trade"),
-        (p2, "Hedge P&L",     "hedge_pnl",     "P&L from hedges placed to offset inventory risk"),
-        (p3, "Inventory P&L", "inventory_pnl", "Mark-to-market gain/loss on open positions"),
-        (p4, "Total P&L",     None,            "Your overall trading P&L"),
-    ]:
-        val = total_pnl if key is None else pnl.get(key, 0)
-        cc  = "#00ff88" if val >= 0 else "#ff4d4d"
-        with col:
-            st.markdown("<div class='card'>", unsafe_allow_html=True)
-            st.markdown(f"<div class='label'>{label}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='big-number' style='color:{cc};'>${val:,.0f}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='label' style='font-size:10px;'>{tip}</div>", unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-    st.caption("**Spread P&L** is guaranteed income you earn on every trade. **Inventory P&L** moves with the market and is risky. Great flow traders maximise spread income while keeping inventory P&L close to zero through hedging.")
-
-    st.markdown("")
-
-    # Hedge signals
-    st.markdown("#### Hedge Signals")
-    needs_hedge = {a: v for a, v in inv.items() if abs(v) >= 500_000}
-    if needs_hedge:
-        for asset, notional in needs_hedge.items():
-            direction = "LONG" if notional > 0 else "SHORT"
-            st.warning(f"⚠️ **{asset}** — You are {direction} ${abs(notional):,.0f}. Consider hedging in the Flow Trading tab.")
-        st.caption("A hedge signal fires when a position exceeds $500,000. A 1% adverse move = $5,000 loss. Go to Flow Trading → Compute Hedge to reduce this exposure.")
-    else:
-        st.success("✅ No hedge signals — all positions within risk limits.")
-        st.caption("Hedge signals appear when any single position exceeds $500,000 notional. Currently all positions are within acceptable limits.")
 
 
 with tabs[2]:
@@ -1418,3 +1271,69 @@ with tabs[3]:
 
 with tabs[4]:
     render_flow_trading_tab()
+
+    st.markdown("---")
+
+    # ── SECTION 2: FLOW TRADING RISK ───────────────────────────
+    st.markdown("### 🏦 Section 2 — Flow Trading Risk")
+    st.caption("This mirrors what a junior flow trader at a bank sees. When a client trades, you take the other side and manage the resulting risk. Your inventory shows what you're holding, and the bar chart shows your market exposure.")
+
+    st.markdown("#### Current Inventory Exposure")
+    inv = st.session_state.get("inventory", {})
+
+    if inv and any(v != 0 for v in inv.values()):
+        assets  = list(inv.keys())
+        values  = [inv[a] for a in assets]
+        colours = ["#00ff88" if v > 0 else "#ff4d4d" for v in values]
+        fig_inv = go.Figure(go.Bar(
+            x=assets, y=values, marker_color=colours,
+            text=[f"${abs(v):,.0f}" for v in values], textposition="outside"
+        ))
+        fig_inv.update_layout(
+            template="plotly_dark", height=320,
+            title="Net Inventory (USD)", yaxis_title="Net Position (USD)",
+            margin=dict(l=40,r=40,t=40,b=40),
+            yaxis=dict(gridcolor="#333"), xaxis=dict(showgrid=False)
+        )
+        st.plotly_chart(fig_inv, use_container_width=True)
+        st.caption("Green = long (you profit if price rises). Red = short (you profit if price falls). Good flow traders keep bars close to zero — large bars mean significant market risk if prices move against you.")
+    else:
+        st.info("No open inventory positions. Go to the Flow Trading tab to simulate some client trades — they will appear here.")
+        st.caption("When you accept a client trade in the Flow Trading tab, your inventory updates here in real time. A flow trader's goal is to keep inventory balanced while collecting the bid/offer spread.")
+
+    st.markdown("")
+
+    # P&L Summary
+    st.markdown("#### P&L Summary")
+    pnl       = st.session_state.get("pnl", {"spread_pnl": 0, "hedge_pnl": 0, "inventory_pnl": 0})
+    total_pnl = sum(pnl.values())
+    p1, p2, p3, p4 = st.columns(4)
+    for col, label, key, tip in [
+        (p1, "Spread P&L",    "spread_pnl",    "Earned from bid/offer on every client trade"),
+        (p2, "Hedge P&L",     "hedge_pnl",     "P&L from hedges placed to offset inventory risk"),
+        (p3, "Inventory P&L", "inventory_pnl", "Mark-to-market gain/loss on open positions"),
+        (p4, "Total P&L",     None,            "Your overall trading P&L"),
+    ]:
+        val = total_pnl if key is None else pnl.get(key, 0)
+        cc  = "#00ff88" if val >= 0 else "#ff4d4d"
+        with col:
+            st.markdown("<div class='card'>", unsafe_allow_html=True)
+            st.markdown(f"<div class='label'>{label}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='big-number' style='color:{cc};'>${val:,.0f}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='label' style='font-size:10px;'>{tip}</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+    st.caption("**Spread P&L** is guaranteed income you earn on every trade. **Inventory P&L** moves with the market and is risky. Great flow traders maximise spread income while keeping inventory P&L close to zero through hedging.")
+
+    st.markdown("")
+
+    # Hedge signals
+    st.markdown("#### Hedge Signals")
+    needs_hedge = {a: v for a, v in inv.items() if abs(v) >= 500_000}
+    if needs_hedge:
+        for asset, notional in needs_hedge.items():
+            direction = "LONG" if notional > 0 else "SHORT"
+            st.warning(f"⚠️ **{asset}** — You are {direction} ${abs(notional):,.0f}. Consider hedging in the Flow Trading tab.")
+        st.caption("A hedge signal fires when a position exceeds $500,000. A 1% adverse move = $5,000 loss. Go to Flow Trading → Compute Hedge to reduce this exposure.")
+    else:
+        st.success("✅ No hedge signals — all positions within risk limits.")
+        st.caption("Hedge signals appear when any single position exceeds $500,000 notional. Currently all positions are within acceptable limits.")
