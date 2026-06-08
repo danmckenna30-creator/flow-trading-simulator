@@ -324,17 +324,6 @@ tabs = st.tabs(["Macro", "Risk", "Commodities", "S&P500", "Flow Trading"])
 
 # ---------- LOAD MARKET DATA ----------
 prices = get_market_data()
-# Sanitise — guarantee change is always float or 0, never None
-for _k in list(prices.keys()):
-    if prices[_k] is None:
-        prices[_k] = {"price": None, "change": 0}
-    elif prices[_k].get("change") is None:
-        prices[_k]["change"] = 0
-    else:
-        try:
-            prices[_k]["change"] = float(prices[_k]["change"])
-        except Exception:
-            prices[_k]["change"] = 0
 
 # ---------- THEME EXTRACTION ----------
 def extract_news_themes(news):
@@ -646,43 +635,127 @@ with tabs[0]:
             st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("### Yield Curve")
-    curve = get_yield_curve()
-    maturities = ["2Y", "5Y", "10Y", "30Y"]
-    yields = [curve[m] for m in maturities]
+    st.caption("The yield curve shows what interest rate the US government pays to borrow money at different time horizons. Its shape is one of the most watched signals in finance — it tells us what the market expects for growth, inflation, and recession risk.")
 
-    fig = go.Figure()
-    fig.add_trace(
-        go.Scatter(
-            x=maturities, y=yields, mode="lines+markers",
-            line=dict(color="#00c3ff", width=3),
-            marker=dict(size=10, color="#ffffff", line=dict(width=2, color="#00c3ff")),
-        )
-    )
-    fig.update_layout(
-        template="plotly_dark", height=350, margin=dict(l=40, r=40, t=40, b=40),
-        xaxis_title="Maturity", yaxis_title="Yield (%)",
-        xaxis=dict(showgrid=False), yaxis=dict(showgrid=True, gridcolor="#333333"),
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    curve = get_yield_curve()
+    maturities    = ["2Y", "5Y", "10Y", "30Y"]
+    yields        = [curve[m] for m in maturities]
+    normal_yields = [2.5, 2.8, 3.0, 3.2]
 
     slope_2s10s = curve["10Y"] - curve["2Y"]
     slope_5s30s = curve["30Y"] - curve["5Y"]
+    is_inverted = slope_2s10s < 0
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.markdown("<div class='label'>2s10s Spread</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='big-number'>{slope_2s10s:.2f} bps</div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+    if slope_2s10s > 0.5:
+        curve_shape, shape_color = "STEEP",    "#00ff88"
+        shape_meaning = "Strong growth expectations — long-term borrowing costs well above short-term. Historically positive for banks and risk assets."
+    elif slope_2s10s > 0:
+        curve_shape, shape_color = "NORMAL",   "#FFDC00"
+        shape_meaning = "Slightly positive slope — markets broadly comfortable with the outlook, though not strongly bullish on growth."
+    elif slope_2s10s > -0.25:
+        curve_shape, shape_color = "FLAT",     "#FF8C00"
+        shape_meaning = "Flat curve signals uncertainty — markets unsure whether growth or recession lies ahead. Often precedes inversion."
+    else:
+        curve_shape, shape_color = "INVERTED", "#ff4d4d"
+        shape_meaning = "Inverted — short-term rates above long-term. Has preceded every US recession in the last 50 years."
 
-    with col2:
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.markdown("<div class='label'>5s30s Spread</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='big-number'>{slope_5s30s:.2f} bps</div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+    yc1, yc2, yc3, yc4 = st.columns(4)
+    with yc1:
+        st.markdown(f"<div class='card'><div class='label'>Curve Shape</div><div class='big-number' style='color:{shape_color};'>{curve_shape}</div></div>", unsafe_allow_html=True)
+    with yc2:
+        c = "#00ff88" if slope_2s10s > 0 else "#ff4d4d"
+        st.markdown(f"<div class='card'><div class='label'>2s10s Spread</div><div class='big-number' style='color:{c};'>{slope_2s10s:+.2f}%</div><div class='label' style='font-size:10px;'>10Y minus 2Y</div></div>", unsafe_allow_html=True)
+    with yc3:
+        c = "#00ff88" if slope_5s30s > 0 else "#ff4d4d"
+        st.markdown(f"<div class='card'><div class='label'>5s30s Spread</div><div class='big-number' style='color:{c};'>{slope_5s30s:+.2f}%</div><div class='label' style='font-size:10px;'>30Y minus 5Y</div></div>", unsafe_allow_html=True)
+    with yc4:
+        rec_signal = "⚠️ WARNING" if is_inverted else "✅ CLEAR"
+        rec_color  = "#ff4d4d" if is_inverted else "#00ff88"
+        st.markdown(f"<div class='card'><div class='label'>Recession Signal</div><div class='big-number' style='color:{rec_color};'>{rec_signal}</div></div>", unsafe_allow_html=True)
 
-    if slope_2s10s < 0:
-        st.markdown("<p style='color:#ff4d4d; font-weight:bold; font-size:18px;'>⚠️ Yield curve inverted (10-year Treasury yield < 2-year Treasury yield)</p>", unsafe_allow_html=True)
+    st.markdown(f"<div class='card' style='color:#DDDDDD; margin-bottom:12px;'>📌 <strong>What this means:</strong> {shape_meaning}</div>", unsafe_allow_html=True)
+
+    fig_yc = go.Figure()
+    fig_yc.add_trace(go.Scatter(
+        x=maturities, y=normal_yields, mode="lines+markers",
+        name="Normal curve (pre-2022)",
+        line=dict(color="#555555", width=2, dash="dash"),
+        marker=dict(size=7, color="#555555"),
+    ))
+    fig_yc.add_trace(go.Scatter(
+        x=maturities, y=yields, mode="lines+markers+text",
+        name="Current curve",
+        line=dict(color="#00c3ff", width=3),
+        marker=dict(size=10, color="#ffffff", line=dict(width=2, color="#00c3ff")),
+        text=[f"{y:.2f}%" for y in yields], textposition="top center"
+    ))
+    fig_yc.add_trace(go.Scatter(
+        x=maturities + maturities[::-1],
+        y=yields + normal_yields[::-1],
+        fill="toself", fillcolor="rgba(0,195,255,0.07)",
+        line=dict(color="rgba(0,0,0,0)"), showlegend=False, hoverinfo="skip"
+    ))
+    fig_yc.update_layout(
+        template="plotly_dark", height=360,
+        margin=dict(l=40, r=40, t=50, b=40),
+        xaxis_title="Maturity", yaxis_title="Yield (%)",
+        xaxis=dict(showgrid=False),
+        yaxis=dict(showgrid=True, gridcolor="#333333"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        title="US Treasury Yield Curve — Current vs Normal"
+    )
+    st.plotly_chart(fig_yc, use_container_width=True)
+    st.caption("Blue line = today's curve. Grey dashed = typical pre-2022 normal. The shaded area shows deviation from normal. Blue dipping below grey at the short end = Fed has pushed short-term rates unusually high.")
+
+    if is_inverted:
+        st.error("⚠️ Yield curve inverted. 2-year yield above the 10-year. Has preceded every US recession in 50 years. Expect more demand for gold, USD and bonds, less for equities.")
+
+    st.markdown("---")
+
+    with st.expander("📚 What is the yield curve? (Beginner guide)", expanded=False):
+        st.markdown("""
+**The basics:** Governments borrow by issuing bonds. A 2-year bond = borrow for 2 years. The yield is the interest rate paid.
+
+**Why the shape matters:** Normally longer bonds pay higher yields. This creates an upward-sloping normal curve.
+
+**The four shapes:**
+- 🟢 **Steep** — strong growth expected. Good for banks and risk assets.
+- 🟡 **Normal** — standard, moderate growth expected.
+- 🟠 **Flat** — uncertainty. Credit starts to tighten.
+- 🔴 **Inverted** — recession signal. Every US recession since 1970 was preceded by inversion.
+
+**For flow traders:** Inverted or flat curve = more client demand for gold, Treasuries and USD. Less for equities and high-yield bonds.
+        """)
+
+    st.markdown("---")
+    st.markdown("#### 🤖 AI Yield Curve Commentary")
+    st.caption("GPT analyses the current curve shape and what it signals for markets and flow traders.")
+
+    if st.button("🔄 Generate Yield Curve Commentary", key="yield_commentary_btn"):
+        with st.spinner("Analysing yield curve..."):
+            try:
+                from gpt_layer import call_gpt_prose
+                yc_prompt = f"""You are a senior fixed income strategist at a major investment bank.
+
+CURRENT US TREASURY YIELD CURVE:
+- 2Y: {curve["2Y"]:.2f}%, 5Y: {curve["5Y"]:.2f}%, 10Y: {curve["10Y"]:.2f}%, 30Y: {curve["30Y"]:.2f}%
+- 2s10s spread: {slope_2s10s:+.2f}% ({"INVERTED" if is_inverted else "positive"})
+- 5s30s spread: {slope_5s30s:+.2f}%, Shape: {curve_shape}
+
+Write a concise 3-4 sentence commentary covering:
+1. What the current curve shape tells us about growth and inflation expectations
+2. What this means for a flow trader today
+3. The single most important thing to watch on the yield curve right now
+
+Bloomberg style. Direct. Plain prose only."""
+
+                yc_commentary = call_gpt_prose(yc_prompt)
+                st.session_state["yield_commentary"] = yc_commentary or "Could not generate commentary."
+            except Exception as e:
+                st.session_state["yield_commentary"] = f"Error: {e}"
+
+    yc_text = st.session_state.get("yield_commentary", "Click above to generate an AI commentary on what the current yield curve signals.")
+    st.markdown(f"<div class='card' style='line-height:1.7; color:#DDDDDD;'>{yc_text}</div>", unsafe_allow_html=True)
 
 
 # =========================================================
@@ -1172,8 +1245,7 @@ with tabs[2]:
     # Build flow signals
     flow_signals = []
     vix_flow = (prices.get("VIX", {}) or {}).get("price") or 20
-    spx_chg_flow = float((prices.get("S&P 500") or {}).get("change") or 0)
-    risk_regime_flow = "risk-on" if spx_chg_flow > 0 else "risk-off"
+    risk_regime_flow = "risk-on" if (prices.get("S&P 500", {}) or {}).get("change", 0) > 0 else "risk-off"
 
     brent_chg  = (prices.get("Brent Crude", {}) or {}).get("change") or 0
     gold_chg   = (prices.get("Gold",        {}) or {}).get("change") or 0
