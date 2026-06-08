@@ -1054,6 +1054,54 @@ Bloomberg style. Direct. Plain prose only."""
 # ======================= RISK TAB ========================
 # =========================================================
 
+
+    st.markdown("---")
+    st.markdown("### 💬 Ask the Trading Assistant")
+    st.caption("Ask anything about markets, trading, or what you see on this tab. Powered by GPT.")
+
+    tab_chat_key = f"chat_history_{"Macro"}"
+    if tab_chat_key not in st.session_state:
+        st.session_state[tab_chat_key] = []
+
+    for msg in st.session_state[tab_chat_key]:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    if _question := st.chat_input(f"Ask about {"Macro"}...", key=f"chat_input_{"Macro"}"):
+        st.session_state[tab_chat_key].append({"role": "user", "content": _question})
+        with st.chat_message("user"):
+            st.markdown(_question)
+
+        inv_ctx  = str({k: v for k, v in st.session_state.get("inventory", {}).items() if v != 0}) or "Flat"
+        pnl_ctx  = sum(st.session_state.get("pnl", {}).values())
+        news_ctx = ""
+        if news_df is not None and "headline" in news_df.columns:
+            news_ctx = "\n".join(news_df["headline"].head(5).tolist())
+
+        _system = f"""You are an expert trading assistant in a macro finance dashboard helping someone learn flow trading.
+TAB CONTEXT: User is on the {"Macro"} tab.
+DASHBOARD DATA: VIX={((prices.get("VIX") or {{}}).get("price","N/A"))}, S&P 500={((prices.get("S&P 500") or {{}}).get("change","N/A"))}%, Inventory={inv_ctx}, P&L=${pnl_ctx:,.0f}
+HEADLINES: {news_ctx if news_ctx else "None"}
+Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard context when relevant."""
+
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                try:
+                    from gpt_layer import call_gpt_prose
+                    _resp = call_gpt_prose(f"{_system}\n\nQuestion: {_question}")
+                    if _resp:
+                        st.markdown(_resp)
+                        st.session_state[tab_chat_key].append({"role": "assistant", "content": _resp})
+                    else:
+                        st.markdown("Could not generate a response — check your OpenAI key.")
+                except Exception as e:
+                    st.markdown(f"Error: {e}")
+
+    if st.session_state.get(tab_chat_key):
+        if st.button("🗑️ Clear chat", key=f"clear_chat_{"Macro"}"):
+            st.session_state[tab_chat_key] = []
+            st.rerun()
+
 with tabs[1]:
     st.markdown("## Risk Monitor")
     st.markdown("---")
@@ -1236,6 +1284,54 @@ Bloomberg style. Direct. Plain prose only."""
     narrative = st.session_state.get("risk_narrative", "Click above to get an AI-powered summary of today's key risks.")
     st.markdown(f"<div class='card' style='line-height:1.7; color:#DDDDDD;'>{narrative}</div>", unsafe_allow_html=True)
 
+
+
+    st.markdown("---")
+    st.markdown("### 💬 Ask the Trading Assistant")
+    st.caption("Ask anything about markets, trading, or what you see on this tab. Powered by GPT.")
+
+    tab_chat_key = f"chat_history_{"Risk"}"
+    if tab_chat_key not in st.session_state:
+        st.session_state[tab_chat_key] = []
+
+    for msg in st.session_state[tab_chat_key]:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    if _question := st.chat_input(f"Ask about {"Risk"}...", key=f"chat_input_{"Risk"}"):
+        st.session_state[tab_chat_key].append({"role": "user", "content": _question})
+        with st.chat_message("user"):
+            st.markdown(_question)
+
+        inv_ctx  = str({k: v for k, v in st.session_state.get("inventory", {}).items() if v != 0}) or "Flat"
+        pnl_ctx  = sum(st.session_state.get("pnl", {}).values())
+        news_ctx = ""
+        if news_df is not None and "headline" in news_df.columns:
+            news_ctx = "\n".join(news_df["headline"].head(5).tolist())
+
+        _system = f"""You are an expert trading assistant in a macro finance dashboard helping someone learn flow trading.
+TAB CONTEXT: User is on the {"Risk"} tab.
+DASHBOARD DATA: VIX={((prices.get("VIX") or {{}}).get("price","N/A"))}, S&P 500={((prices.get("S&P 500") or {{}}).get("change","N/A"))}%, Inventory={inv_ctx}, P&L=${pnl_ctx:,.0f}
+HEADLINES: {news_ctx if news_ctx else "None"}
+Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard context when relevant."""
+
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                try:
+                    from gpt_layer import call_gpt_prose
+                    _resp = call_gpt_prose(f"{_system}\n\nQuestion: {_question}")
+                    if _resp:
+                        st.markdown(_resp)
+                        st.session_state[tab_chat_key].append({"role": "assistant", "content": _resp})
+                    else:
+                        st.markdown("Could not generate a response — check your OpenAI key.")
+                except Exception as e:
+                    st.markdown(f"Error: {e}")
+
+    if st.session_state.get(tab_chat_key):
+        if st.button("🗑️ Clear chat", key=f"clear_chat_{"Risk"}"):
+            st.session_state[tab_chat_key] = []
+            st.rerun()
 
 with tabs[2]:
     st.markdown("## Commodities")
@@ -1668,6 +1764,54 @@ Bloomberg terminal style. Professional and direct. Plain prose only. No bullet p
         st.markdown(f"- {line}")
 
 
+
+    st.markdown("---")
+    st.markdown("### 💬 Ask the Trading Assistant")
+    st.caption("Ask anything about markets, trading, or what you see on this tab. Powered by GPT.")
+
+    tab_chat_key = f"chat_history_{"Commodities"}"
+    if tab_chat_key not in st.session_state:
+        st.session_state[tab_chat_key] = []
+
+    for msg in st.session_state[tab_chat_key]:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    if _question := st.chat_input(f"Ask about {"Commodities"}...", key=f"chat_input_{"Commodities"}"):
+        st.session_state[tab_chat_key].append({"role": "user", "content": _question})
+        with st.chat_message("user"):
+            st.markdown(_question)
+
+        inv_ctx  = str({k: v for k, v in st.session_state.get("inventory", {}).items() if v != 0}) or "Flat"
+        pnl_ctx  = sum(st.session_state.get("pnl", {}).values())
+        news_ctx = ""
+        if news_df is not None and "headline" in news_df.columns:
+            news_ctx = "\n".join(news_df["headline"].head(5).tolist())
+
+        _system = f"""You are an expert trading assistant in a macro finance dashboard helping someone learn flow trading.
+TAB CONTEXT: User is on the {"Commodities"} tab.
+DASHBOARD DATA: VIX={((prices.get("VIX") or {{}}).get("price","N/A"))}, S&P 500={((prices.get("S&P 500") or {{}}).get("change","N/A"))}%, Inventory={inv_ctx}, P&L=${pnl_ctx:,.0f}
+HEADLINES: {news_ctx if news_ctx else "None"}
+Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard context when relevant."""
+
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                try:
+                    from gpt_layer import call_gpt_prose
+                    _resp = call_gpt_prose(f"{_system}\n\nQuestion: {_question}")
+                    if _resp:
+                        st.markdown(_resp)
+                        st.session_state[tab_chat_key].append({"role": "assistant", "content": _resp})
+                    else:
+                        st.markdown("Could not generate a response — check your OpenAI key.")
+                except Exception as e:
+                    st.markdown(f"Error: {e}")
+
+    if st.session_state.get(tab_chat_key):
+        if st.button("🗑️ Clear chat", key=f"clear_chat_{"Commodities"}"):
+            st.session_state[tab_chat_key] = []
+            st.rerun()
+
 with tabs[3]:
     render_sp500_tab()
 
@@ -1675,6 +1819,54 @@ with tabs[3]:
 # =========================================================
 # =================== FLOW TRADING TAB ====================
 # =========================================================
+
+
+    st.markdown("---")
+    st.markdown("### 💬 Ask the Trading Assistant")
+    st.caption("Ask anything about markets, trading, or what you see on this tab. Powered by GPT.")
+
+    tab_chat_key = f"chat_history_{"S&P500"}"
+    if tab_chat_key not in st.session_state:
+        st.session_state[tab_chat_key] = []
+
+    for msg in st.session_state[tab_chat_key]:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    if _question := st.chat_input(f"Ask about {"S&P500"}...", key=f"chat_input_{"S&P500"}"):
+        st.session_state[tab_chat_key].append({"role": "user", "content": _question})
+        with st.chat_message("user"):
+            st.markdown(_question)
+
+        inv_ctx  = str({k: v for k, v in st.session_state.get("inventory", {}).items() if v != 0}) or "Flat"
+        pnl_ctx  = sum(st.session_state.get("pnl", {}).values())
+        news_ctx = ""
+        if news_df is not None and "headline" in news_df.columns:
+            news_ctx = "\n".join(news_df["headline"].head(5).tolist())
+
+        _system = f"""You are an expert trading assistant in a macro finance dashboard helping someone learn flow trading.
+TAB CONTEXT: User is on the {"S&P500"} tab.
+DASHBOARD DATA: VIX={((prices.get("VIX") or {{}}).get("price","N/A"))}, S&P 500={((prices.get("S&P 500") or {{}}).get("change","N/A"))}%, Inventory={inv_ctx}, P&L=${pnl_ctx:,.0f}
+HEADLINES: {news_ctx if news_ctx else "None"}
+Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard context when relevant."""
+
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                try:
+                    from gpt_layer import call_gpt_prose
+                    _resp = call_gpt_prose(f"{_system}\n\nQuestion: {_question}")
+                    if _resp:
+                        st.markdown(_resp)
+                        st.session_state[tab_chat_key].append({"role": "assistant", "content": _resp})
+                    else:
+                        st.markdown("Could not generate a response — check your OpenAI key.")
+                except Exception as e:
+                    st.markdown(f"Error: {e}")
+
+    if st.session_state.get(tab_chat_key):
+        if st.button("🗑️ Clear chat", key=f"clear_chat_{"S&P500"}"):
+            st.session_state[tab_chat_key] = []
+            st.rerun()
 
 with tabs[4]:
     render_flow_trading_tab()
@@ -1745,69 +1937,50 @@ with tabs[4]:
         st.success("✅ No hedge signals — all positions within risk limits.")
         st.caption("Hedge signals appear when any single position exceeds $500,000 notional. Currently all positions are within acceptable limits.")
 
-# ══════════════════════════════════════════════════════════════
-# FLOATING AI ASSISTANT — available across all tabs
-# ══════════════════════════════════════════════════════════════
-st.markdown("---")
-st.markdown("### 💬 Ask the Trading Assistant")
-st.caption("Ask anything about markets, trading concepts, what you see on the dashboard, or how flow trading works. Powered by GPT.")
 
-# Initialise chat history
-if "chat_history" not in st.session_state:
-    st.session_state["chat_history"] = []
+    st.markdown("---")
+    st.markdown("### 💬 Ask the Trading Assistant")
+    st.caption("Ask anything about markets, trading, or what you see on this tab. Powered by GPT.")
 
-# Display chat history
-for msg in st.session_state["chat_history"]:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+    tab_chat_key = f"chat_history_{"Flow Trading"}"
+    if tab_chat_key not in st.session_state:
+        st.session_state[tab_chat_key] = []
 
-# Chat input
-if user_question := st.chat_input("Ask a question about markets, trading, or the dashboard..."):
-    # Add user message to history
-    st.session_state["chat_history"].append({"role": "user", "content": user_question})
-    with st.chat_message("user"):
-        st.markdown(user_question)
+    for msg in st.session_state[tab_chat_key]:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
 
-    # Build context from current dashboard state
-    inv_context   = str({k: v for k, v in st.session_state.get("inventory", {}).items() if v != 0}) or "Flat"
-    pnl_context   = st.session_state.get("pnl", {})
-    total_pnl_ctx = sum(pnl_context.values()) if pnl_context else 0
-    news_context  = ""
-    if news_df is not None and "headline" in news_df.columns:
-        news_context = "\n".join(news_df["headline"].head(5).tolist())
+    if _question := st.chat_input(f"Ask about {"Flow Trading"}...", key=f"chat_input_{"Flow Trading"}"):
+        st.session_state[tab_chat_key].append({"role": "user", "content": _question})
+        with st.chat_message("user"):
+            st.markdown(_question)
 
-    system_prompt = f"""You are an expert trading assistant embedded in a macro finance dashboard. 
-You help users — particularly beginners learning about flow trading and financial markets — understand 
-concepts, interpret what they see on the dashboard, and make sense of market conditions.
+        inv_ctx  = str({k: v for k, v in st.session_state.get("inventory", {}).items() if v != 0}) or "Flat"
+        pnl_ctx  = sum(st.session_state.get("pnl", {}).values())
+        news_ctx = ""
+        if news_df is not None and "headline" in news_df.columns:
+            news_ctx = "\n".join(news_df["headline"].head(5).tolist())
 
-CURRENT DASHBOARD CONTEXT:
-- VIX: {(prices.get("VIX") or {{}}).get("price", "N/A")}
-- S&P 500 change: {(prices.get("S&P 500") or {{}}).get("change", "N/A")}%
-- Gold change: {(prices.get("Gold (GC=F)") or (prices.get("Gold") or {{}}).get("change", "N/A"))}
-- Current inventory: {inv_context}
-- Total P&L: ${total_pnl_ctx:,.0f}
-- Latest headlines: {news_context if news_context else "None available"}
+        _system = f"""You are an expert trading assistant in a macro finance dashboard helping someone learn flow trading.
+TAB CONTEXT: User is on the {"Flow Trading"} tab.
+DASHBOARD DATA: VIX={((prices.get("VIX") or {{}}).get("price","N/A"))}, S&P 500={((prices.get("S&P 500") or {{}}).get("change","N/A"))}%, Inventory={inv_ctx}, P&L=${pnl_ctx:,.0f}
+HEADLINES: {news_ctx if news_ctx else "None"}
+Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard context when relevant."""
 
-Answer clearly and helpfully. For beginners, explain jargon. For technical questions, be precise.
-Keep answers concise — 2-4 sentences unless a longer explanation is genuinely needed.
-If asked about something on the dashboard, use the context above to give a specific answer."""
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                try:
+                    from gpt_layer import call_gpt_prose
+                    _resp = call_gpt_prose(f"{_system}\n\nQuestion: {_question}")
+                    if _resp:
+                        st.markdown(_resp)
+                        st.session_state[tab_chat_key].append({"role": "assistant", "content": _resp})
+                    else:
+                        st.markdown("Could not generate a response — check your OpenAI key.")
+                except Exception as e:
+                    st.markdown(f"Error: {e}")
 
-    with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            try:
-                from gpt_layer import call_gpt_prose
-                full_prompt = f"{system_prompt}\n\nUser question: {user_question}"
-                response = call_gpt_prose(full_prompt)
-                if response:
-                    st.markdown(response)
-                    st.session_state["chat_history"].append({"role": "assistant", "content": response})
-                else:
-                    st.markdown("Sorry, I couldn't generate a response. Check your OpenAI key in Streamlit secrets.")
-            except Exception as e:
-                st.markdown(f"Error: {e}")
-
-# Clear chat button
-if st.session_state["chat_history"]:
-    if st.button("🗑️ Clear chat", key="clear_chat"):
-        st.session_state["chat_history"] = []
-        st.rerun()
+    if st.session_state.get(tab_chat_key):
+        if st.button("🗑️ Clear chat", key=f"clear_chat_{"Flow Trading"}"):
+            st.session_state[tab_chat_key] = []
+            st.rerun()
