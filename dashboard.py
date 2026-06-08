@@ -581,7 +581,10 @@ with tabs[0]:
     st.markdown("### Morning Macro Brief")
     if "story_text" not in st.session_state:
         try:
-            st.session_state["story_text"] = generate_story_mode()
+            st.session_state["story_text"] = generate_story_mode(
+                news_df=news_df,
+                gpt_analysis=st.session_state.get("gpt_analysis")
+            )
         except Exception as e:
             st.session_state["story_text"] = f"Story mode error: {e}"
 
@@ -590,7 +593,10 @@ with tabs[0]:
 
     if st.button("🔄 Regenerate Morning Brief"):
         try:
-            st.session_state["story_text"] = generate_story_mode()
+            st.session_state["story_text"] = generate_story_mode(
+                news_df=news_df,
+                gpt_analysis=st.session_state.get("gpt_analysis")
+            )
             st.rerun()
         except Exception as e:
             st.error(f"Story mode error: {e}")
@@ -700,13 +706,10 @@ with tabs[1]:
     elif vix_price <= 25: vol_regime, vol_color = "NORMAL VOL", "#FFDC00"
     else:                 vol_regime, vol_color = "HIGH VOL",   "#ff4d4d"
 
-    # ════════════════════════════════════════════
-    # SECTION 1 — MARKET RISK
-    # ════════════════════════════════════════════
+    # ── SECTION 1: MARKET RISK ──────────────────────────────────
     st.markdown("### 📊 Section 1 — Market Risk Overview")
-    st.caption("This section shows the overall market environment. As a flow trader, this tells you whether clients are likely to be buying risk (stocks, oil) or selling it (safe havens like USD and gold).")
+    st.caption("This section shows the overall market environment. As a flow trader, this tells you whether clients are likely buying risk assets (stocks, oil, copper) or selling them for safety (gold, USD, bonds).")
 
-    # Score cards
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         st.markdown("<div class='card'>", unsafe_allow_html=True)
@@ -760,27 +763,23 @@ with tabs[1]:
         paper_bgcolor="rgba(0,0,0,0)", font={"color": "#ccc"}
     )
     st.plotly_chart(fig_gauge, use_container_width=True)
-    st.caption("The gauge shows where we sit between full risk-off (red, left) and risk-on (green, right). As a flow trader, this tells you which direction client orders are likely to skew today.")
+    st.caption("The gauge shows where markets sit between full risk-off (red) and risk-on (green). As a flow trader this predicts which way client orders will skew — in risk-on environments expect more equity and commodity buying.")
     st.markdown("---")
 
     # Heatmap
     st.markdown("#### Cross-Asset Heatmap")
     heatmap_assets  = ["VIX", "S&P 500", "USDJPY", "Brent Crude", "Copper", "Gold"]
     heatmap_changes = [(prices.get(a, {}) or {}).get("change") or 0 for a in heatmap_assets]
-
     fig_heat = go.Figure(go.Heatmap(
-        z=[heatmap_changes],
-        x=heatmap_assets,
-        y=["% Change"],
-        colorscale=[[0.0, "#ff4d4d"], [0.5, "#111111"], [1.0, "#00ff88"]],
+        z=[heatmap_changes], x=heatmap_assets, y=["% Change"],
+        colorscale=[[0.0,"#ff4d4d"],[0.5,"#111111"],[1.0,"#00ff88"]],
         zmid=0,
         text=[[f"{v:+.2f}%" for v in heatmap_changes]],
-        texttemplate="%{text}",
-        showscale=True
+        texttemplate="%{text}", showscale=True
     ))
-    fig_heat.update_layout(template="plotly_dark", height=160, margin=dict(l=40, r=40, t=20, b=40))
+    fig_heat.update_layout(template="plotly_dark", height=160, margin=dict(l=40,r=40,t=20,b=40))
     st.plotly_chart(fig_heat, use_container_width=True)
-    st.caption("Red = falling today, Green = rising. VIX rising is bad for markets. Copper and S&P 500 rising together = strong risk-on. Gold rising while equities fall = flight to safety.")
+    st.caption("Red = falling today, Green = rising. VIX rising (red) is bad — fear is up. Copper and S&P 500 rising together = strong risk-on signal. Gold rising while equities fall = classic flight to safety.")
     st.markdown("---")
 
     # FX Pairs
@@ -798,7 +797,7 @@ with tabs[1]:
             st.markdown(f"<div class='big-number'>{price if price else 'N/A'}</div>", unsafe_allow_html=True)
             st.markdown(f"<div style='color:{color}; font-weight:bold;'>{chstr}</div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
-    st.caption("USD/JPY rising = risk-on (investors selling safe-haven Yen). GBP/USD and EUR/USD rising = dollar weakening, usually positive for global risk. Flow traders watch FX closely — big moves signal institutional flows.")
+    st.caption("USD/JPY rising = risk-on (investors selling safe-haven Yen). GBP/USD and EUR/USD rising = dollar weakening, positive for global risk. Large FX moves signal big institutional flows that flow traders need to be aware of.")
     st.markdown("---")
 
     # News Risk Themes
@@ -827,16 +826,13 @@ with tabs[1]:
             st.info("No elevated risk themes in current headlines.")
     else:
         st.info("No news data available yet.")
-    st.caption("These themes are extracted from today's headlines. Each active theme represents a macro risk that could drive client flow — e.g. geopolitical risk tends to push clients into gold and out of equities.")
+    st.caption("These themes are extracted from today's headlines. Each active theme is a macro risk that could drive client flow — e.g. geopolitical risk pushes clients into gold and out of equities.")
     st.markdown("---")
 
-    # ════════════════════════════════════════════
-    # SECTION 2 — FLOW TRADING RISK
-    # ════════════════════════════════════════════
+    # ── SECTION 2: FLOW TRADING RISK ───────────────────────────
     st.markdown("### 🏦 Section 2 — Flow Trading Risk")
-    st.caption("This mirrors what a junior flow trader at a bank sees. When a client trades, you take the other side and manage the risk. Your inventory shows what you're holding, and the bar chart shows your exposure.")
+    st.caption("This mirrors what a junior flow trader at a bank sees. When a client trades, you take the other side and manage the resulting risk. Your inventory shows what you're holding, and the bar chart shows your market exposure.")
 
-    # Inventory bar chart
     st.markdown("#### Current Inventory Exposure")
     inv = st.session_state.get("inventory", {})
 
@@ -844,26 +840,21 @@ with tabs[1]:
         assets  = list(inv.keys())
         values  = [inv[a] for a in assets]
         colours = ["#00ff88" if v > 0 else "#ff4d4d" for v in values]
-
         fig_inv = go.Figure(go.Bar(
-            x=assets, y=values,
-            marker_color=colours,
-            text=[f"${abs(v):,.0f}" for v in values],
-            textposition="outside"
+            x=assets, y=values, marker_color=colours,
+            text=[f"${abs(v):,.0f}" for v in values], textposition="outside"
         ))
         fig_inv.update_layout(
             template="plotly_dark", height=320,
-            title="Net Inventory (USD)",
-            yaxis_title="Net Position (USD)",
-            margin=dict(l=40, r=40, t=40, b=40),
-            yaxis=dict(gridcolor="#333"),
-            xaxis=dict(showgrid=False)
+            title="Net Inventory (USD)", yaxis_title="Net Position (USD)",
+            margin=dict(l=40,r=40,t=40,b=40),
+            yaxis=dict(gridcolor="#333"), xaxis=dict(showgrid=False)
         )
         st.plotly_chart(fig_inv, use_container_width=True)
-        st.caption("Green = long (profit if price rises). Red = short (profit if price falls). Good flow traders keep bars close to zero — large bars mean big market risk.")
+        st.caption("Green = long (you profit if price rises). Red = short (you profit if price falls). Good flow traders keep bars close to zero — large bars mean significant market risk if prices move against you.")
     else:
-        st.info("No open inventory positions. Go to the Flow Trading tab to simulate client trades — they will appear here.")
-        st.caption("When you accept a client trade in the Flow Trading tab, your inventory updates here. A flow trader's job is to keep inventory balanced.")
+        st.info("No open inventory positions. Go to the Flow Trading tab to simulate some client trades — they will appear here.")
+        st.caption("When you accept a client trade in the Flow Trading tab, your inventory updates here in real time. A flow trader's goal is to keep inventory balanced while collecting the bid/offer spread.")
 
     st.markdown("")
 
@@ -871,7 +862,6 @@ with tabs[1]:
     st.markdown("#### P&L Summary")
     pnl       = st.session_state.get("pnl", {"spread_pnl": 0, "hedge_pnl": 0, "inventory_pnl": 0})
     total_pnl = sum(pnl.values())
-
     p1, p2, p3, p4 = st.columns(4)
     for col, label, key, tip in [
         (p1, "Spread P&L",    "spread_pnl",    "Earned from bid/offer on every client trade"),
@@ -887,8 +877,8 @@ with tabs[1]:
             st.markdown(f"<div class='big-number' style='color:{cc};'>${val:,.0f}</div>", unsafe_allow_html=True)
             st.markdown(f"<div class='label' style='font-size:10px;'>{tip}</div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
+    st.caption("**Spread P&L** is guaranteed income you earn on every trade. **Inventory P&L** moves with the market and is risky. Great flow traders maximise spread income while keeping inventory P&L close to zero through hedging.")
 
-    st.caption("**Spread P&L** is guaranteed income earned on every trade. **Inventory P&L** is risky and moves with the market. Good flow traders maximise spread income while keeping inventory P&L close to zero.")
     st.markdown("")
 
     # Hedge signals
@@ -898,10 +888,10 @@ with tabs[1]:
         for asset, notional in needs_hedge.items():
             direction = "LONG" if notional > 0 else "SHORT"
             st.warning(f"⚠️ **{asset}** — You are {direction} ${abs(notional):,.0f}. Consider hedging in the Flow Trading tab.")
-        st.caption("A hedge signal fires when a position exceeds $500,000. A 1% move against you = $5,000 loss. Go to Flow Trading → Compute Hedge to reduce this risk.")
+        st.caption("A hedge signal fires when a position exceeds $500,000. A 1% adverse move = $5,000 loss. Go to Flow Trading → Compute Hedge to reduce this exposure.")
     else:
         st.success("✅ No hedge signals — all positions within risk limits.")
-        st.caption("Hedge signals appear here when any single position exceeds $500,000 notional. For now you're within limits.")
+        st.caption("Hedge signals appear when any single position exceeds $500,000 notional. Currently all positions are within acceptable limits.")
 
 
 with tabs[2]:
@@ -941,8 +931,7 @@ with tabs[2]:
 
     st.markdown("### Commodity Commentary")
     try:
-        news_df = pd.read_csv("ai_news_output.csv")
-        news_list = news_df.to_dict(orient="records")
+        news_list = news_df.to_dict(orient="records") if news_df is not None else []
     except:
         news_list = []
 
