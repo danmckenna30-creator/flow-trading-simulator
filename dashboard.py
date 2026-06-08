@@ -324,6 +324,18 @@ tabs = st.tabs(["Macro", "Risk", "Commodities", "S&P500", "Flow Trading"])
 
 # ---------- LOAD MARKET DATA ----------
 prices = get_market_data()
+# Sanitise all price values — ensure change is always float or 0, never None
+for _k in list(prices.keys()):
+    if prices[_k] is None:
+        prices[_k] = {"price": None, "change": 0}
+    else:
+        if prices[_k].get("change") is None:
+            prices[_k]["change"] = 0
+        else:
+            try:
+                prices[_k]["change"] = float(prices[_k]["change"])
+            except Exception:
+                prices[_k]["change"] = 0
 
 # ---------- THEME EXTRACTION ----------
 def extract_news_themes(news):
