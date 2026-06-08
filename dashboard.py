@@ -999,37 +999,169 @@ with tabs[0]:
             st.error(f"Story mode error: {e}")
 
     st.markdown("### Market Snapshot")
-    cols = st.columns(5)
+    st.caption("Click any asset to view its full price history.")
 
+    # Asset ticker map for charting
+    SNAPSHOT_TICKERS = {
+        "S&P 500": "^GSPC", "FTSE 100": "^FTSE",
+        "US 2Y Yield": "SHY", "US 10Y Yield": "IEF", "US 30Y Yield": "TLT",
+        "GBPUSD": "GBPUSD=X", "EURUSD": "EURUSD=X", "USDJPY": "JPY=X",
+        "Brent Crude": "BZ=F", "WTI Crude": "CL=F", "Natural Gas": "NG=F",
+        "Gold": "GC=F", "Silver": "SI=F", "Copper": "HG=F",
+        "Corn": "ZC=F", "Wheat": "ZW=F", "VIX": "^VIX",
+    }
+
+    cols = st.columns(5)
     for i, (name, item) in enumerate(prices.items()):
         with cols[i % 5]:
             st.markdown("<div class='card'>", unsafe_allow_html=True)
             st.markdown(f"<div class='label'>{name}</div>", unsafe_allow_html=True)
-
             if item and item["price"] is not None:
-                price = item["price"]
+                price  = item["price"]
                 change = item["change"]
-
                 if "Yield" in name or change is None:
-                    change_str = ""
-                    color = "#ffffff"
+                    change_str, color = "", "#ffffff"
+                elif change > 0:
+                    change_str, color = f"▲ {change}%", "#00ff88"
+                elif change < 0:
+                    change_str, color = f"▼ {abs(change)}%", "#ff4d4d"
                 else:
-                    if change > 0:
-                        change_str = f"▲ {change}%"
-                        color = "#00ff88"
-                    elif change < 0:
-                        change_str = f"▼ {abs(change)}%"
-                        color = "#ff4d4d"
-                    else:
-                        change_str = "0.00%"
-                        color = "#ffffff"
-
+                    change_str, color = "0.00%", "#ffffff"
                 st.markdown(f"<div class='big-number'>{price}</div>", unsafe_allow_html=True)
-                st.markdown(f"<div style='font-size:16px; font-weight:bold; color:{color};'>{change_str}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='font-size:16px;font-weight:bold;color:{color};'>{change_str}</div>", unsafe_allow_html=True)
             else:
                 st.markdown("<div class='big-number'>N/A</div>", unsafe_allow_html=True)
                 st.markdown("<div style='font-size:16px;'>N/A</div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
+
+            # Click to expand chart
+            if st.button(f"📈 Chart", key=f"chart_btn_{name}"):
+                if st.session_state.get("selected_asset") == name:
+                    st.session_state.pop("selected_asset", None)
+                else:
+                    st.session_state["selected_asset"] = name
+
+    # Full-width asset chart — shows below the grid when an asset is selected
+    selected = st.session_state.get("selected_asset")
+    if selected and selected in SNAPSHOT_TICKERS:
+        st.markdown("")
+        st.markdown(f"### 📈 {selected} — Price History")
+
+        period_options = {
+            "1 Month":  "1mo",
+            "3 Months": "3mo",
+            "6 Months": "6mo",
+            "1 Year":   "1y",
+            "2 Years":  "2y",
+            "5 Years":  "5y",
+        }
+
+        col_period, col_ma, col_close = st.columns([2, 2, 1])
+        with col_period:
+            selected_period_label = st.selectbox(
+                "Time period",
+                list(period_options.keys()),
+                index=2,
+                key="chart_period"
+            )
+        with col_ma:
+            show_ma = st.multiselect(
+                "Moving averages",
+                ["20D", "50D", "200D"],
+                default=["50D"],
+                key="chart_ma"
+            )
+        with col_close:
+            st.markdown("")
+            if st.button("✕ Close chart"):
+                st.session_state.pop("selected_asset", None)
+                st.rerun()
+
+        period = period_options[selected_period_label]
+        ticker = SNAPSHOT_TICKERS[selected]
+
+        @st.cache_data(ttl=900)
+        def _get_asset_history(ticker, period):
+            try:
+                import yfinance as yf
+                hist = yf.Ticker(ticker).history(period=period)
+                if hist is not None and len(hist) > 1:
+                    return hist["Close"].dropna()
+            except Exception:
+                pass
+            return None
+
+        with st.spinner(f"Loading {selected} history..."):
+            hist = _get_asset_history(ticker, period)
+
+        if hist is not None and len(hist) > 1:
+            dates  = [str(d.date()) for d in hist.index]
+            closes = list(hist.values)
+
+            # Key stats
+            start_price = closes[0]
+            end_price   = closes[-1]
+            pct_chg     = ((end_price - start_price) / start_price) * 100
+            high        = max(closes)
+            low         = min(closes)
+
+            s1, s2, s3, s4 = st.columns(4)
+            pct_color = "#00ff88" if pct_chg > 0 else "#ff4d4d"
+            with s1:
+                st.markdown(f"<div class='card'><div class='label'>Current</div><div class='big-number'>{end_price:.4f}</div></div>", unsafe_allow_html=True)
+            with s2:
+                st.markdown(f"<div class='card'><div class='label'>{selected_period_label} Return</div><div class='big-number' style='color:{pct_color};'>{pct_chg:+.2f}%</div></div>", unsafe_allow_html=True)
+            with s3:
+                st.markdown(f"<div class='card'><div class='label'>Period High</div><div class='big-number' style='color:#00ff88;'>{high:.4f}</div></div>", unsafe_allow_html=True)
+            with s4:
+                st.markdown(f"<div class='card'><div class='label'>Period Low</div><div class='big-number' style='color:#ff4d4d;'>{low:.4f}</div></div>", unsafe_allow_html=True)
+
+            st.markdown("")
+
+            # Build chart
+            line_color = "#00ff88" if pct_chg >= 0 else "#ff4d4d"
+            fig_asset = go.Figure()
+
+            # Price line with fill
+            fig_asset.add_trace(go.Scatter(
+                x=dates, y=closes,
+                mode="lines",
+                name=selected,
+                line=dict(color=line_color, width=2),
+                fill="tozeroy",
+                fillcolor=f"rgba({'0,255,136' if pct_chg >= 0 else '255,77,77'},0.05)"
+            ))
+
+            # Moving averages
+            import pandas as pd
+            series = pd.Series(closes, index=dates)
+            ma_colors = {"20D": "#FFDC00", "50D": "#00c3ff", "200D": "#ff4d4d"}
+            ma_windows = {"20D": 20, "50D": 50, "200D": 200}
+            for ma in show_ma:
+                window = ma_windows[ma]
+                if len(closes) >= window:
+                    ma_vals = series.rolling(window).mean()
+                    fig_asset.add_trace(go.Scatter(
+                        x=dates, y=list(ma_vals),
+                        mode="lines",
+                        name=f"{ma} MA",
+                        line=dict(color=ma_colors[ma], width=1.5, dash="dash")
+                    ))
+
+            fig_asset.update_layout(
+                template="plotly_dark",
+                height=420,
+                margin=dict(l=40, r=40, t=30, b=40),
+                xaxis=dict(showgrid=False, rangeslider=dict(visible=True, thickness=0.05)),
+                yaxis=dict(showgrid=True, gridcolor="#333333"),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                hovermode="x unified"
+            )
+            st.plotly_chart(fig_asset, use_container_width=True)
+            st.caption(f"**{selected}** | {selected_period_label} | Green fill = positive return, Red fill = negative. Drag the range bar at the bottom to zoom into a specific period.")
+        else:
+            st.warning(f"Could not load price history for {selected}. The asset may not be available from Yahoo Finance for this period.")
+        st.markdown("---")
 
     st.markdown("### Yield Curve")
     st.caption("The yield curve shows what interest rate the US government pays to borrow money at different time horizons. Its shape is one of the most watched signals in finance — it tells us what the market expects for growth, inflation, and recession risk.")
