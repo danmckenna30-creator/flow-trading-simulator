@@ -1629,7 +1629,7 @@ with tabs[2]:
     st.markdown("---")
 
     # ── SECTION 3: PRICE HISTORY SPARKLINES ─────────────────────
-    st.markdown("### 📈 30-Day Price History")
+    st.markdown("### 📈 Price History")
     st.caption("Trend context for each commodity — one day's move means little without knowing the recent direction.")
 
     COMMODITY_TICKERS = {
@@ -1638,13 +1638,26 @@ with tabs[2]:
         "Corn": "ZC=F", "Wheat": "ZW=F"
     }
 
+    # Period selector
+    period_map = {
+        "1 Week": "5d", "1 Month": "1mo", "3 Months": "3mo",
+        "6 Months": "6mo", "1 Year": "1y", "2 Years": "2y"
+    }
+    selected_period_label = st.select_slider(
+        "Time period",
+        options=list(period_map.keys()),
+        value="1 Month",
+        key="comm_history_period"
+    )
+    selected_period = period_map[selected_period_label]
+
     @st.cache_data(ttl=3600)
-    def get_commodity_history():
+    def get_commodity_history(period):
         import yfinance as yf
         history = {}
         for name, ticker in COMMODITY_TICKERS.items():
             try:
-                hist = yf.Ticker(ticker).history(period="1mo")
+                hist = yf.Ticker(ticker).history(period=period)
                 if hist is not None and len(hist) > 5:
                     history[name] = {
                         "dates":  [str(d.date()) for d in hist.index],
@@ -1654,8 +1667,8 @@ with tabs[2]:
                 pass
         return history
 
-    with st.spinner("Loading 30-day history..."):
-        comm_history = get_commodity_history()
+    with st.spinner(f"Loading {selected_period_label} history..."):
+        comm_history = get_commodity_history(selected_period)
 
     spark_cols = st.columns(4)
     for i, name in enumerate(commodity_names):
@@ -1665,26 +1678,22 @@ with tabs[2]:
                 dates  = comm_history[name]["dates"]
                 start_price = closes[0]
                 end_price   = closes[-1]
-                pct_30d = ((end_price - start_price) / start_price) * 100
-                trend_color = "#00ff88" if pct_30d > 0 else "#ff4d4d"
+                pct_chg     = ((end_price - start_price) / start_price) * 100
+                trend_color = "#00ff88" if pct_chg > 0 else "#ff4d4d"
 
                 fig_spark = go.Figure(go.Scatter(
-                    x=dates, y=closes,
-                    mode="lines",
+                    x=dates, y=closes, mode="lines",
                     line=dict(color=trend_color, width=2),
                     fill="tozeroy",
-                    fillcolor=f"rgba({'0,255,136' if pct_30d > 0 else '255,77,77'},0.08)"
+                    fillcolor="rgba(0,255,136,0.08)" if pct_chg > 0 else "rgba(255,77,77,0.08)",
                 ))
                 fig_spark.update_layout(
-                    template="plotly_dark",
-                    height=120,
+                    template="plotly_dark", height=120,
                     margin=dict(l=0, r=0, t=25, b=0),
-                    title=dict(text=f"{name} ({pct_30d:+.1f}% 30d)", font=dict(size=11, color=trend_color), x=0),
+                    title=dict(text=f"{name} ({pct_chg:+.1f}% {selected_period_label})", font=dict(size=11, color=trend_color), x=0),
                     xaxis=dict(showticklabels=False, showgrid=False, zeroline=False),
                     yaxis=dict(showticklabels=False, showgrid=False, zeroline=False),
-                    showlegend=False,
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)"
+                    showlegend=False, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
                 )
                 st.plotly_chart(fig_spark, use_container_width=True, config={"displayModeBar": False})
             else:
