@@ -1744,3 +1744,70 @@ with tabs[4]:
     else:
         st.success("✅ No hedge signals — all positions within risk limits.")
         st.caption("Hedge signals appear when any single position exceeds $500,000 notional. Currently all positions are within acceptable limits.")
+
+# ══════════════════════════════════════════════════════════════
+# FLOATING AI ASSISTANT — available across all tabs
+# ══════════════════════════════════════════════════════════════
+st.markdown("---")
+st.markdown("### 💬 Ask the Trading Assistant")
+st.caption("Ask anything about markets, trading concepts, what you see on the dashboard, or how flow trading works. Powered by GPT.")
+
+# Initialise chat history
+if "chat_history" not in st.session_state:
+    st.session_state["chat_history"] = []
+
+# Display chat history
+for msg in st.session_state["chat_history"]:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+
+# Chat input
+if user_question := st.chat_input("Ask a question about markets, trading, or the dashboard..."):
+    # Add user message to history
+    st.session_state["chat_history"].append({"role": "user", "content": user_question})
+    with st.chat_message("user"):
+        st.markdown(user_question)
+
+    # Build context from current dashboard state
+    inv_context   = str({k: v for k, v in st.session_state.get("inventory", {}).items() if v != 0}) or "Flat"
+    pnl_context   = st.session_state.get("pnl", {})
+    total_pnl_ctx = sum(pnl_context.values()) if pnl_context else 0
+    news_context  = ""
+    if news_df is not None and "headline" in news_df.columns:
+        news_context = "\n".join(news_df["headline"].head(5).tolist())
+
+    system_prompt = f"""You are an expert trading assistant embedded in a macro finance dashboard. 
+You help users — particularly beginners learning about flow trading and financial markets — understand 
+concepts, interpret what they see on the dashboard, and make sense of market conditions.
+
+CURRENT DASHBOARD CONTEXT:
+- VIX: {(prices.get("VIX") or {{}}).get("price", "N/A")}
+- S&P 500 change: {(prices.get("S&P 500") or {{}}).get("change", "N/A")}%
+- Gold change: {(prices.get("Gold (GC=F)") or (prices.get("Gold") or {{}}).get("change", "N/A"))}
+- Current inventory: {inv_context}
+- Total P&L: ${total_pnl_ctx:,.0f}
+- Latest headlines: {news_context if news_context else "None available"}
+
+Answer clearly and helpfully. For beginners, explain jargon. For technical questions, be precise.
+Keep answers concise — 2-4 sentences unless a longer explanation is genuinely needed.
+If asked about something on the dashboard, use the context above to give a specific answer."""
+
+    with st.chat_message("assistant"):
+        with st.spinner("Thinking..."):
+            try:
+                from gpt_layer import call_gpt_prose
+                full_prompt = f"{system_prompt}\n\nUser question: {user_question}"
+                response = call_gpt_prose(full_prompt)
+                if response:
+                    st.markdown(response)
+                    st.session_state["chat_history"].append({"role": "assistant", "content": response})
+                else:
+                    st.markdown("Sorry, I couldn't generate a response. Check your OpenAI key in Streamlit secrets.")
+            except Exception as e:
+                st.markdown(f"Error: {e}")
+
+# Clear chat button
+if st.session_state["chat_history"]:
+    if st.button("🗑️ Clear chat", key="clear_chat"):
+        st.session_state["chat_history"] = []
+        st.rerun()
