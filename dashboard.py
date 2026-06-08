@@ -324,6 +324,17 @@ tabs = st.tabs(["Macro", "Risk", "Commodities", "S&P500", "Flow Trading"])
 
 # ---------- LOAD MARKET DATA ----------
 prices = get_market_data()
+# Sanitise — guarantee change is always float or 0, never None
+for _k in list(prices.keys()):
+    if prices[_k] is None:
+        prices[_k] = {"price": None, "change": 0}
+    elif prices[_k].get("change") is None:
+        prices[_k]["change"] = 0
+    else:
+        try:
+            prices[_k]["change"] = float(prices[_k]["change"])
+        except Exception:
+            prices[_k]["change"] = 0
 
 # ---------- THEME EXTRACTION ----------
 def extract_news_themes(news):
@@ -1212,7 +1223,7 @@ with tabs[2]:
     # Build flow signals
     flow_signals = []
     vix_flow = (prices.get("VIX", {}) or {}).get("price") or 20
-    risk_regime_flow = "risk-on" if (prices.get("S&P 500", {}) or {}).get("change", 0) > 0 else "risk-off"
+    risk_regime_flow = "risk-on" if float((prices.get("S&P 500") or {}).get("change") or 0) > 0 else "risk-off"
 
     brent_chg  = (prices.get("Brent Crude", {}) or {}).get("change") or 0
     gold_chg   = (prices.get("Gold",        {}) or {}).get("change") or 0
