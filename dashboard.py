@@ -635,138 +635,43 @@ with tabs[0]:
             st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("### Yield Curve")
-    st.caption("The yield curve shows what interest rate the US government pays to borrow money at different time horizons. Its shape is one of the most watched signals in finance — it tells us what the market expects for growth, inflation, and recession risk.")
-
     curve = get_yield_curve()
     maturities = ["2Y", "5Y", "10Y", "30Y"]
-    yields     = [curve[m] for m in maturities]
-    normal_yields = [2.5, 2.8, 3.0, 3.2]  # pre-2022 typical normal curve
+    yields = [curve[m] for m in maturities]
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=maturities, y=yields, mode="lines+markers",
+            line=dict(color="#00c3ff", width=3),
+            marker=dict(size=10, color="#ffffff", line=dict(width=2, color="#00c3ff")),
+        )
+    )
+    fig.update_layout(
+        template="plotly_dark", height=350, margin=dict(l=40, r=40, t=40, b=40),
+        xaxis_title="Maturity", yaxis_title="Yield (%)",
+        xaxis=dict(showgrid=False), yaxis=dict(showgrid=True, gridcolor="#333333"),
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
     slope_2s10s = curve["10Y"] - curve["2Y"]
     slope_5s30s = curve["30Y"] - curve["5Y"]
-    is_inverted = slope_2s10s < 0
 
-    if slope_2s10s > 0.5:
-        curve_shape, shape_color = "STEEP",    "#00ff88"
-        shape_meaning = "Strong growth expectations — long-term borrowing costs well above short-term. Historically positive for banks and risk assets."
-    elif slope_2s10s > 0:
-        curve_shape, shape_color = "NORMAL",   "#FFDC00"
-        shape_meaning = "Slightly positive slope — markets are broadly comfortable with the outlook, though not strongly bullish on growth."
-    elif slope_2s10s > -0.25:
-        curve_shape, shape_color = "FLAT",     "#FF8C00"
-        shape_meaning = "Flat curve signals uncertainty — markets aren't sure whether growth or recession lies ahead. Often a precursor to inversion."
-    else:
-        curve_shape, shape_color = "INVERTED", "#ff4d4d"
-        shape_meaning = "Inverted — short-term rates above long-term. Has preceded every US recession in the last 50 years. The market expects rates to fall, meaning a slowdown is coming."
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.markdown("<div class='label'>2s10s Spread</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='big-number'>{slope_2s10s:.2f} bps</div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    # Status cards
-    yc1, yc2, yc3, yc4 = st.columns(4)
-    with yc1:
-        st.markdown(f"<div class='card'><div class='label'>Curve Shape</div><div class='big-number' style='color:{shape_color};'>{curve_shape}</div></div>", unsafe_allow_html=True)
-    with yc2:
-        c = "#00ff88" if slope_2s10s > 0 else "#ff4d4d"
-        st.markdown(f"<div class='card'><div class='label'>2s10s Spread</div><div class='big-number' style='color:{c};'>{slope_2s10s:+.2f}%</div><div class='label' style='font-size:10px;'>10Y minus 2Y</div></div>", unsafe_allow_html=True)
-    with yc3:
-        c = "#00ff88" if slope_5s30s > 0 else "#ff4d4d"
-        st.markdown(f"<div class='card'><div class='label'>5s30s Spread</div><div class='big-number' style='color:{c};'>{slope_5s30s:+.2f}%</div><div class='label' style='font-size:10px;'>30Y minus 5Y</div></div>", unsafe_allow_html=True)
-    with yc4:
-        rec_signal = "⚠️ WARNING" if is_inverted else "✅ CLEAR"
-        rec_color  = "#ff4d4d" if is_inverted else "#00ff88"
-        st.markdown(f"<div class='card'><div class='label'>Recession Signal</div><div class='big-number' style='color:{rec_color};'>{rec_signal}</div></div>", unsafe_allow_html=True)
+    with col2:
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.markdown("<div class='label'>5s30s Spread</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='big-number'>{slope_5s30s:.2f} bps</div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown(f"<div class='card' style='color:#DDDDDD; margin-bottom:12px;'>📌 <strong>What this means right now:</strong> {shape_meaning}</div>", unsafe_allow_html=True)
-
-    # Chart — current vs normal
-    fig_yc = go.Figure()
-    fig_yc.add_trace(go.Scatter(
-        x=maturities, y=normal_yields, mode="lines+markers",
-        name="Normal curve (pre-2022)",
-        line=dict(color="#555555", width=2, dash="dash"),
-        marker=dict(size=7, color="#555555"),
-    ))
-    fig_yc.add_trace(go.Scatter(
-        x=maturities, y=yields, mode="lines+markers+text",
-        name="Current curve",
-        line=dict(color="#00c3ff", width=3),
-        marker=dict(size=10, color="#ffffff", line=dict(width=2, color="#00c3ff")),
-        text=[f"{y:.2f}%" for y in yields], textposition="top center"
-    ))
-    fig_yc.add_trace(go.Scatter(
-        x=maturities + maturities[::-1],
-        y=yields + normal_yields[::-1],
-        fill="toself", fillcolor="rgba(0,195,255,0.07)",
-        line=dict(color="rgba(0,0,0,0)"), showlegend=False, hoverinfo="skip"
-    ))
-    fig_yc.update_layout(
-        template="plotly_dark", height=360,
-        margin=dict(l=40, r=40, t=50, b=40),
-        xaxis_title="Maturity", yaxis_title="Yield (%)",
-        xaxis=dict(showgrid=False),
-        yaxis=dict(showgrid=True, gridcolor="#333333"),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        title="US Treasury Yield Curve — Current vs Normal"
-    )
-    st.plotly_chart(fig_yc, use_container_width=True)
-    st.caption("**Blue line** = today's curve. **Grey dashed** = typical pre-2022 normal for comparison. The shaded gap shows how far current yields deviate from normal. When the blue line dips below the grey at the short end, the Fed has pushed short-term rates unusually high — a classic late-cycle signal.")
-
-    if is_inverted:
-        st.error("⚠️ **Yield curve inverted.** 2-year yield is above the 10-year. This has preceded every US recession in the past 50 years. Flow traders should expect increased demand for safe-haven assets (gold, USD, government bonds) and reduced risk appetite in equities and credit.")
-    st.markdown("---")
-
-    with st.expander("📚 What is the yield curve? (Beginner guide)", expanded=False):
-        st.markdown("""
-**The basics:**
-Governments borrow money by issuing bonds. A 2-year bond = borrow for 2 years. A 10-year bond = 10 years. The yield is the interest rate paid.
-
-**Why the shape matters:**
-Normally, longer bonds pay *higher* yields — you want more compensation for locking money away longer. This creates an upward-sloping "normal" curve.
-
-**What inversion means:**
-When short-term yields rise *above* long-term yields, the curve inverts. This happens when central banks hike short-term rates aggressively to fight inflation. Investors then expect a slowdown will force rate cuts — so they buy long bonds, pushing long-term yields *down*.
-
-**The four shapes:**
-- 🟢 **Steep** — economy expected to grow strongly. Good for banks and risk assets.
-- 🟡 **Normal** — standard environment, moderate growth expected.
-- 🟠 **Flat** — uncertainty. Credit starts to tighten.
-- 🔴 **Inverted** — recession signal. Every US recession since 1970 was preceded by inversion.
-
-**For flow traders:**
-An inverted or flattening curve shifts client flows towards safe assets. Expect more demand for gold, Treasuries, and USD — and less for equities and high-yield bonds.
-        """)
-
-    st.markdown("---")
-    st.markdown("#### 🤖 AI Yield Curve Commentary")
-    st.caption("GPT analyses the current curve shape and what it signals for markets and flow traders.")
-
-    if st.button("🔄 Generate Yield Curve Commentary", key="yield_commentary_btn"):
-        with st.spinner("Analysing yield curve..."):
-            try:
-                from gpt_layer import call_gpt_prose
-                yc_prompt = f"""You are a senior fixed income strategist at a major investment bank.
-
-CURRENT US TREASURY YIELD CURVE:
-- 2Y yield: {curve["2Y"]:.2f}%
-- 5Y yield: {curve["5Y"]:.2f}%
-- 10Y yield: {curve["10Y"]:.2f}%
-- 30Y yield: {curve["30Y"]:.2f}%
-- 2s10s spread: {slope_2s10s:+.2f}% ({"INVERTED" if is_inverted else "positive"})
-- 5s30s spread: {slope_5s30s:+.2f}%
-- Curve shape: {curve_shape}
-
-Write a concise 3-4 sentence commentary that:
-1. Describes what the current curve shape tells us about growth and inflation expectations
-2. Explains what this means for a flow trader — likely client behaviour today
-3. Flags the single most important thing to watch on the yield curve right now
-
-Bloomberg terminal style. Direct and professional. Plain prose only."""
-
-                yc_commentary = call_gpt_prose(yc_prompt)
-                st.session_state["yield_commentary"] = yc_commentary or "Could not generate commentary — check OpenAI key."
-            except Exception as e:
-                st.session_state["yield_commentary"] = f"Error: {e}"
-
-    yc_text = st.session_state.get("yield_commentary", "Click above to generate an AI commentary on what the current yield curve signals for markets.")
-    st.markdown(f"<div class='card' style='line-height:1.7; color:#DDDDDD;'>{yc_text}</div>", unsafe_allow_html=True)
+    if slope_2s10s < 0:
+        st.markdown("<p style='color:#ff4d4d; font-weight:bold; font-size:18px;'>⚠️ Yield curve inverted (10-year Treasury yield < 2-year Treasury yield)</p>", unsafe_allow_html=True)
 
 
 # =========================================================
@@ -990,33 +895,31 @@ with tabs[1]:
 
 
 with tabs[2]:
-    st.markdown("### Commodities")
-    commodity_names = ["Brent Crude", "WTI Crude", "Natural Gas", "Gold", "Silver", "Copper", "Corn", "Wheat"]
-    cols = st.columns(4)
+    st.markdown("## Commodities")
+    st.caption("Live prices, trends, risk themes, and flow signals across energy, metals, and agriculture.")
+    st.markdown("---")
 
+    commodity_names = ["Brent Crude", "WTI Crude", "Natural Gas", "Gold", "Silver", "Copper", "Corn", "Wheat"]
+
+    # ── SECTION 1: PRICE CARDS ──────────────────────────────────
+    st.markdown("### 📊 Live Prices")
+    cols = st.columns(4)
     for i, name in enumerate(commodity_names):
         with cols[i % 4]:
             item = prices.get(name, None)
             st.markdown("<div class='card'>", unsafe_allow_html=True)
             st.markdown(f"<div class='label'>{name}</div>", unsafe_allow_html=True)
-
             if item and item["price"] is not None:
-                price = item["price"]
+                price  = item["price"]
                 change = item["change"]
-
                 if change is None:
-                    change_str = "N/A"
-                    color = "#ffffff"
+                    change_str, color = "N/A", "#ffffff"
                 elif change > 0:
-                    change_str = f"▲ {change}%"
-                    color = "#00ff88"
+                    change_str, color = f"▲ {change}%", "#00ff88"
                 elif change < 0:
-                    change_str = f"▼ {abs(change)}%"
-                    color = "#ff4d4d"
+                    change_str, color = f"▼ {abs(change)}%", "#ff4d4d"
                 else:
-                    change_str = "0.00%"
-                    color = "#ffffff"
-
+                    change_str, color = "0.00%", "#ffffff"
                 st.markdown(f"<div class='big-number'>{price}</div>", unsafe_allow_html=True)
                 st.markdown(f"<div style='font-size:16px; font-weight:bold; color:{color};'>{change_str}</div>", unsafe_allow_html=True)
             else:
@@ -1024,75 +927,403 @@ with tabs[2]:
                 st.markdown("<div style='font-size:16px;'>N/A</div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("### Commodity Commentary")
+    st.markdown("---")
+
+    # ── SECTION 2: HEATMAP ──────────────────────────────────────
+    st.markdown("### 🌡️ Commodity Heatmap")
+    st.caption("Today's % change across all commodities at a glance. Red = falling, Green = rising.")
+
+    comm_changes = [(prices.get(n, {}) or {}).get("change") or 0 for n in commodity_names]
+    fig_comm_heat = go.Figure(go.Heatmap(
+        z=[comm_changes],
+        x=commodity_names,
+        y=["% Change"],
+        colorscale=[[0.0,"#ff4d4d"],[0.5,"#111111"],[1.0,"#00ff88"]],
+        zmid=0,
+        text=[[f"{v:+.2f}%" for v in comm_changes]],
+        texttemplate="%{text}",
+        showscale=True
+    ))
+    fig_comm_heat.update_layout(
+        template="plotly_dark", height=160,
+        margin=dict(l=40, r=40, t=10, b=60)
+    )
+    st.plotly_chart(fig_comm_heat, use_container_width=True)
+    st.caption("Energy (Brent, WTI, Gas) moving together = supply/demand story. Gold and Silver rising while equities fall = risk-off. Copper rising = global growth optimism. Corn and Wheat moving = weather or geopolitical supply disruption.")
+    st.markdown("---")
+
+    # ── SECTION 3: PRICE HISTORY SPARKLINES ─────────────────────
+    st.markdown("### 📈 30-Day Price History")
+    st.caption("Trend context for each commodity — one day's move means little without knowing the recent direction.")
+
+    COMMODITY_TICKERS = {
+        "Brent Crude": "BZ=F", "WTI Crude": "CL=F", "Natural Gas": "NG=F",
+        "Gold": "GC=F", "Silver": "SI=F", "Copper": "HG=F",
+        "Corn": "ZC=F", "Wheat": "ZW=F"
+    }
+
+    @st.cache_data(ttl=3600)
+    def get_commodity_history():
+        import yfinance as yf
+        history = {}
+        for name, ticker in COMMODITY_TICKERS.items():
+            try:
+                hist = yf.Ticker(ticker).history(period="1mo")
+                if hist is not None and len(hist) > 5:
+                    history[name] = {
+                        "dates":  [str(d.date()) for d in hist.index],
+                        "closes": [round(float(v), 4) for v in hist["Close"]]
+                    }
+            except Exception:
+                pass
+        return history
+
+    with st.spinner("Loading 30-day history..."):
+        comm_history = get_commodity_history()
+
+    spark_cols = st.columns(4)
+    for i, name in enumerate(commodity_names):
+        with spark_cols[i % 4]:
+            if name in comm_history and comm_history[name]["closes"]:
+                closes = comm_history[name]["closes"]
+                dates  = comm_history[name]["dates"]
+                start_price = closes[0]
+                end_price   = closes[-1]
+                pct_30d = ((end_price - start_price) / start_price) * 100
+                trend_color = "#00ff88" if pct_30d > 0 else "#ff4d4d"
+
+                fig_spark = go.Figure(go.Scatter(
+                    x=dates, y=closes,
+                    mode="lines",
+                    line=dict(color=trend_color, width=2),
+                    fill="tozeroy",
+                    fillcolor=f"rgba({'0,255,136' if pct_30d > 0 else '255,77,77'},0.08)"
+                ))
+                fig_spark.update_layout(
+                    template="plotly_dark",
+                    height=120,
+                    margin=dict(l=0, r=0, t=25, b=0),
+                    title=dict(text=f"{name} ({pct_30d:+.1f}% 30d)", font=dict(size=11, color=trend_color), x=0),
+                    xaxis=dict(showticklabels=False, showgrid=False, zeroline=False),
+                    yaxis=dict(showticklabels=False, showgrid=False, zeroline=False),
+                    showlegend=False,
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)"
+                )
+                st.plotly_chart(fig_spark, use_container_width=True, config={"displayModeBar": False})
+            else:
+                st.markdown(f"<div class='card'><div class='label'>{name}</div><div>No history</div></div>", unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── SECTION 4: CORRELATION MATRIX ───────────────────────────
+    st.markdown("### 🔗 Commodity Correlation Matrix")
+    st.caption("Shows which commodities are moving together over the last 30 days. Dark green = moving in sync. Dark red = moving in opposite directions. Grey = no relationship.")
+
+    @st.cache_data(ttl=3600)
+    def get_commodity_correlations():
+        import yfinance as yf
+        import pandas as pd
+        closes_dict = {}
+        for name, ticker in COMMODITY_TICKERS.items():
+            try:
+                hist = yf.Ticker(ticker).history(period="1mo")
+                if hist is not None and len(hist) > 5:
+                    closes_dict[name] = hist["Close"].values[-20:]
+            except Exception:
+                pass
+        if len(closes_dict) < 2:
+            return None
+        import numpy as np
+        names = list(closes_dict.keys())
+        matrix = []
+        for n1 in names:
+            row = []
+            for n2 in names:
+                a, b = closes_dict[n1], closes_dict[n2]
+                min_len = min(len(a), len(b))
+                if min_len < 5:
+                    row.append(0)
+                else:
+                    corr = float(np.corrcoef(a[-min_len:], b[-min_len:])[0,1])
+                    row.append(round(corr, 2))
+            matrix.append(row)
+        return names, matrix
+
+    corr_result = get_commodity_correlations()
+    if corr_result:
+        corr_names, corr_matrix = corr_result
+        fig_corr = go.Figure(go.Heatmap(
+            z=corr_matrix,
+            x=corr_names, y=corr_names,
+            colorscale=[[0.0,"#ff4d4d"],[0.5,"#222222"],[1.0,"#00ff88"]],
+            zmin=-1, zmax=1,
+            text=[[f"{v:.2f}" for v in row] for row in corr_matrix],
+            texttemplate="%{text}", showscale=True,
+            colorbar=dict(title="Correlation")
+        ))
+        fig_corr.update_layout(
+            template="plotly_dark", height=380,
+            margin=dict(l=40, r=40, t=20, b=40)
+        )
+        st.plotly_chart(fig_corr, use_container_width=True)
+        st.caption("**Reading the matrix:** Each cell shows how correlated two commodities are over the past 20 trading days. +1.0 = they move perfectly together. -1.0 = they move in opposite directions. 0 = no relationship. As a flow trader, high correlation between two assets means hedging one with the other is less effective.")
+    else:
+        st.info("Not enough data to compute correlations yet.")
+    st.markdown("---")
+
+    # ── SECTION 5: PER-COMMODITY RISK CARDS ─────────────────────
+    st.markdown("### ⚡ Commodity Risk Themes")
+    st.caption("Each commodity's risk status based on today's headlines and price action. These are the themes a commodity desk would flag in their morning meeting.")
+
     try:
         news_list = news_df.to_dict(orient="records") if news_df is not None else []
-    except:
+    except Exception:
         news_list = []
 
     themes = extract_commodity_themes(news_list)
-    sent = themes["sentiment"]
+
+    commodity_risks = {
+        "Brent Crude": {
+            "drivers": [],
+            "risk": "LOW",
+            "color": "#00ff88"
+        },
+        "WTI Crude": {"drivers": [], "risk": "LOW", "color": "#00ff88"},
+        "Natural Gas": {"drivers": [], "risk": "LOW", "color": "#00ff88"},
+        "Gold": {"drivers": [], "risk": "LOW", "color": "#00ff88"},
+        "Copper": {"drivers": [], "risk": "LOW", "color": "#00ff88"},
+        "Corn": {"drivers": [], "risk": "LOW", "color": "#00ff88"},
+        "Wheat": {"drivers": [], "risk": "LOW", "color": "#00ff88"},
+    }
+
+    if themes.get("oil_supply"):
+        commodity_risks["Brent Crude"]["drivers"].append("Supply headlines active")
+        commodity_risks["WTI Crude"]["drivers"].append("Supply headlines active")
+    if themes.get("oil_geopolitics"):
+        commodity_risks["Brent Crude"]["drivers"].append("⚠️ Geopolitical risk")
+        commodity_risks["WTI Crude"]["drivers"].append("⚠️ Geopolitical risk")
+        commodity_risks["Brent Crude"]["risk"] = "HIGH"
+        commodity_risks["Brent Crude"]["color"] = "#ff4d4d"
+    if themes.get("oil_demand"):
+        commodity_risks["Brent Crude"]["drivers"].append("Demand signal")
+        commodity_risks["WTI Crude"]["drivers"].append("Demand signal")
+    if themes.get("energy"):
+        commodity_risks["Natural Gas"]["drivers"].append("Energy headlines active")
+        commodity_risks["Natural Gas"]["risk"] = "MEDIUM"
+        commodity_risks["Natural Gas"]["color"] = "#FFDC00"
+    if themes.get("inflation"):
+        commodity_risks["Gold"]["drivers"].append("Inflation/rates driver")
+        commodity_risks["Gold"]["risk"] = "MEDIUM"
+        commodity_risks["Gold"]["color"] = "#FFDC00"
+    if themes.get("china"):
+        commodity_risks["Copper"]["drivers"].append("China demand signal")
+        commodity_risks["Copper"]["risk"] = "MEDIUM"
+        commodity_risks["Copper"]["color"] = "#FFDC00"
+    if themes.get("weather"):
+        commodity_risks["Corn"]["drivers"].append("⚠️ Weather risk")
+        commodity_risks["Wheat"]["drivers"].append("⚠️ Weather risk")
+        commodity_risks["Corn"]["risk"] = "HIGH"
+        commodity_risks["Corn"]["color"] = "#ff4d4d"
+    if themes.get("ag_supply"):
+        commodity_risks["Wheat"]["drivers"].append("Supply disruption signal")
+        commodity_risks["Wheat"]["risk"] = "HIGH"
+        commodity_risks["Wheat"]["color"] = "#ff4d4d"
+
+    # Apply price-based risk adjustments
+    for name in ["Brent Crude", "WTI Crude", "Natural Gas", "Gold", "Silver", "Copper", "Corn", "Wheat"]:
+        change = (prices.get(name, {}) or {}).get("change") or 0
+        if abs(change) > 2 and name in commodity_risks:
+            if commodity_risks[name]["risk"] == "LOW":
+                commodity_risks[name]["risk"] = "MEDIUM"
+                commodity_risks[name]["color"] = "#FFDC00"
+            commodity_risks[name]["drivers"].append(f"Large price move: {change:+.1f}%")
+
+    risk_cols = st.columns(4)
+    for i, (name, info) in enumerate(commodity_risks.items()):
+        with risk_cols[i % 4]:
+            drivers_text = "<br>".join(info["drivers"]) if info["drivers"] else "No active themes"
+            st.markdown(
+                f"<div class='card'>"
+                f"<div class='label'>{name}</div>"
+                f"<div class='big-number' style='color:{info["color"]};'>{info["risk"]}</div>"
+                f"<div style='font-size:11px; color:#AAAAAA; margin-top:4px;'>{drivers_text}</div>"
+                f"</div>",
+                unsafe_allow_html=True
+            )
+
+    st.markdown("---")
+
+    # ── SECTION 6: FLOW SIGNALS ──────────────────────────────────
+    st.markdown("### 🏦 Flow Trading Signals")
+    st.caption("Based on today's price moves, news themes, and the overall risk regime — what are clients likely buying and selling? This is how a commodity flow trader thinks about the day ahead.")
+
+    # Build flow signals
+    flow_signals = []
+    vix_flow = (prices.get("VIX", {}) or {}).get("price") or 20
+    risk_regime_flow = "risk-on" if (prices.get("S&P 500", {}) or {}).get("change", 0) > 0 else "risk-off"
+
+    brent_chg  = (prices.get("Brent Crude", {}) or {}).get("change") or 0
+    gold_chg   = (prices.get("Gold",        {}) or {}).get("change") or 0
+    copper_chg = (prices.get("Copper",      {}) or {}).get("change") or 0
+    gas_chg    = (prices.get("Natural Gas", {}) or {}).get("change") or 0
+    silver_chg = (prices.get("Silver",      {}) or {}).get("change") or 0
+    corn_chg   = (prices.get("Corn",        {}) or {}).get("change") or 0
+    wheat_chg  = (prices.get("Wheat",       {}) or {}).get("change") or 0
+
+    if brent_chg > 1:
+        flow_signals.append(("🟢 BUY FLOW", "Brent Crude", f"Up {brent_chg:+.1f}% — expect client buying. Likely driven by {'geopolitical risk premium' if themes.get('oil_geopolitics') else 'supply constraints' if themes.get('oil_supply') else 'broad risk-on positioning'}."))
+    elif brent_chg < -1:
+        flow_signals.append(("🔴 SELL FLOW", "Brent Crude", f"Down {brent_chg:+.1f}% — expect client selling or hedging. {'Demand concerns dominant.' if themes.get('oil_demand') else 'Broad risk-off tone.'}"))
+
+    if gold_chg > 0.5 and vix_flow > 18:
+        flow_signals.append(("🟢 BUY FLOW", "Gold", f"Up {gold_chg:+.1f}% with VIX at {vix_flow:.0f} — safe-haven demand. Clients likely adding gold as portfolio hedge."))
+    elif gold_chg < -0.5 and risk_regime_flow == "risk-on":
+        flow_signals.append(("🔴 SELL FLOW", "Gold", f"Down {gold_chg:+.1f}% — risk-on environment. Clients rotating out of safe havens into equities and cyclicals."))
+
+    if copper_chg > 1:
+        flow_signals.append(("🟢 BUY FLOW", "Copper", f"Up {copper_chg:+.1f}% — industrial demand signal. {'China growth story supporting copper.' if themes.get('china') else 'Global growth optimism driving base metals.'} "))
+    elif copper_chg < -1:
+        flow_signals.append(("🔴 SELL FLOW", "Copper", f"Down {copper_chg:+.1f}% — growth concern signal. Watch for broader risk-off rotation."))
+
+    if gas_chg > 2:
+        flow_signals.append(("🟢 BUY FLOW", "Natural Gas", f"Up {gas_chg:+.1f}% — energy supply or seasonal demand driving prices. Utility and energy sector clients likely active."))
+    elif gas_chg < -2:
+        flow_signals.append(("🔴 SELL FLOW", "Natural Gas", f"Down {gas_chg:+.1f}% — oversupply or demand miss. Energy producers may be hedging."))
+
+    if themes.get("weather") and (corn_chg > 1 or wheat_chg > 1):
+        flow_signals.append(("🟢 BUY FLOW", "Grains", f"Weather headlines active with Corn {corn_chg:+.1f}% and Wheat {wheat_chg:+.1f}%. Agricultural traders and food producers likely buying protection."))
+
+    if not flow_signals:
+        flow_signals.append(("🟡 NEUTRAL", "All Commodities", "No strong directional signals today. Commodity moves are modest and headline themes are limited. Expect two-way flow with no clear dominant direction."))
+
+    for signal, asset, reasoning in flow_signals:
+        color = "#00ff88" if "BUY" in signal else "#ff4d4d" if "SELL" in signal else "#FFDC00"
+        st.markdown(
+            f"<div class='card' style='margin-bottom:8px; border-left: 3px solid {color};'>"
+            f"<div style='color:{color}; font-weight:bold; font-size:14px;'>{signal} — {asset}</div>"
+            f"<div style='color:#DDDDDD; font-size:13px; margin-top:4px;'>{reasoning}</div>"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+
+    st.markdown("")
+
+    # Position sizing guide
+    st.markdown("#### Position Sizing Guide")
+    st.caption("Based on current VIX and commodity volatility, how large a position would a flow trader typically take? Lower VIX = more comfortable taking larger positions. Higher VIX = tighter risk limits.")
+
+    if vix_flow < 15:
+        size_regime, size_color, size_pct = "LOW VOL — Normal sizing", "#00ff88", 100
+    elif vix_flow < 20:
+        size_regime, size_color, size_pct = "MODERATE VOL — Slightly reduced", "#FFDC00", 75
+    elif vix_flow < 25:
+        size_regime, size_color, size_pct = "ELEVATED VOL — Reduced sizing", "#FF8C00", 50
+    else:
+        size_regime, size_color, size_pct = "HIGH VOL — Minimum sizing", "#ff4d4d", 25
+
+    sz1, sz2, sz3 = st.columns(3)
+    with sz1:
+        st.markdown(f"<div class='card'><div class='label'>Vol Regime</div><div style='color:{size_color}; font-weight:bold; font-size:15px;'>{size_regime}</div></div>", unsafe_allow_html=True)
+    with sz2:
+        st.markdown(f"<div class='card'><div class='label'>VIX Level</div><div class='big-number'>{vix_flow:.1f}</div></div>", unsafe_allow_html=True)
+    with sz3:
+        st.markdown(f"<div class='card'><div class='label'>Suggested Position Size</div><div class='big-number' style='color:{size_color};'>{size_pct}% of normal</div></div>", unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── SECTION 7: GPT COMMODITY BRIEF ──────────────────────────
+    st.markdown("### 🤖 AI Commodity Brief")
+    st.caption("GPT synthesises today's commodity price moves, news themes, and correlations into a trader-ready morning note for the commodity desk.")
+
+    if st.button("🔄 Generate Commodity Brief", key="commodity_brief_btn"):
+        with st.spinner("Generating commodity brief..."):
+            try:
+                from gpt_layer import call_gpt_prose
+                comm_prompt = f"""You are a senior commodity strategist writing a morning brief for a commodity flow trading desk.
+
+LIVE COMMODITY DATA:
+- Brent Crude: {brent_chg:+.2f}% today
+- WTI Crude: {(prices.get("WTI Crude",{}) or {}).get("change",0) or 0:+.2f}% today
+- Natural Gas: {gas_chg:+.2f}% today
+- Gold: {gold_chg:+.2f}% today
+- Silver: {silver_chg:+.2f}% today
+- Copper: {copper_chg:+.2f}% today
+- Corn: {corn_chg:+.2f}% today
+- Wheat: {wheat_chg:+.2f}% today
+
+ACTIVE NEWS THEMES:
+- Oil supply headlines: {themes.get("oil_supply", False)}
+- Geopolitical risk: {themes.get("oil_geopolitics", False)}
+- China/manufacturing: {themes.get("china", False)}
+- Inflation/rates: {themes.get("inflation", False)}
+- Weather/crop risk: {themes.get("weather", False)}
+- Agricultural supply: {themes.get("ag_supply", False)}
+
+MACRO CONTEXT:
+- VIX: {vix_flow:.1f}
+- Risk regime: {risk_regime_flow}
+- Overall news sentiment: {themes.get("sentiment", 0):.2f}
+
+Write a concise 4-5 sentence commodity morning brief covering:
+1. The dominant theme driving commodity markets today
+2. The most important individual commodity move and why
+3. What the energy/metals/agriculture split tells us about the macro environment
+4. One specific flow trading observation — what are clients likely buying or selling?
+
+Bloomberg terminal style. Professional and direct. Plain prose only. No bullet points."""
+
+                comm_brief = call_gpt_prose(comm_prompt)
+                st.session_state["commodity_brief"] = comm_brief or "Could not generate brief — check OpenAI key."
+            except Exception as e:
+                st.session_state["commodity_brief"] = f"Error: {e}"
+
+    comm_text = st.session_state.get("commodity_brief", "Click above to generate an AI commodity brief.")
+    st.markdown(f"<div class='card' style='line-height:1.7; color:#DDDDDD;'>{comm_text}</div>", unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── SECTION 8: ORIGINAL COMMENTARY ──────────────────────────
+    st.markdown("### 📝 Commodity Commentary")
+
+    sent = themes.get("sentiment", 0)
     commentary = []
 
-    oil = prices["Brent Crude"]["change"]
+    oil = (prices.get("Brent Crude", {}) or {}).get("change")
     if oil is not None:
         if oil > 1:
-            if themes["oil_supply"]:
-                commentary.append("Oil is climbing as supply-side headlines — including OPEC+ discipline and production constraints — support prices.")
-            elif themes["oil_geopolitics"]:
-                commentary.append("Oil is higher as geopolitical tensions in key producing regions add a risk premium.")
-            elif themes["oil_demand"]:
-                commentary.append("Oil is gaining on stronger demand expectations reflected in travel and consumption-related headlines.")
-            else:
-                commentary.append("Oil is moving higher despite limited headline catalysts, suggesting technical or positioning-driven flows.")
+            if themes.get("oil_supply"): commentary.append("Oil is climbing as supply-side headlines — including OPEC+ discipline and production constraints — support prices.")
+            elif themes.get("oil_geopolitics"): commentary.append("Oil is higher as geopolitical tensions in key producing regions add a risk premium.")
+            elif themes.get("oil_demand"): commentary.append("Oil is gaining on stronger demand expectations reflected in travel and consumption-related headlines.")
+            else: commentary.append("Oil is moving higher despite limited headline catalysts, suggesting technical or positioning-driven flows.")
         elif oil < -1:
-            if themes["oil_supply"]:
-                commentary.append("Oil is falling even as supply headlines remain tight, indicating demand concerns are dominating.")
-            elif themes["oil_demand"]:
-                commentary.append("Oil is under pressure as headlines point to softer demand expectations.")
-            else:
-                commentary.append("Oil is weakening with little headline support, likely reflecting easing supply constraints or a broader macro risk-off tone.")
+            if themes.get("oil_supply"): commentary.append("Oil is falling even as supply headlines remain tight, indicating demand concerns are dominating.")
+            elif themes.get("oil_demand"): commentary.append("Oil is under pressure as headlines point to softer demand expectations.")
+            else: commentary.append("Oil is weakening with little headline support, likely reflecting easing supply constraints or a broader macro risk-off tone.")
         else:
             commentary.append("Oil is relatively stable, with no dominant supply or demand headlines driving direction.")
 
-    copper = prices["Copper"]["change"]
-    if copper is not None:
-        if themes["china"]:
-            commentary.append("Copper is reacting to China-related headlines, with industrial activity remaining a key demand driver.")
-        elif copper > 1:
-            commentary.append("Copper is firm, potentially reflecting improved global manufacturing sentiment.")
-        elif copper < -1:
-            commentary.append("Copper is softer, hinting at weaker industrial demand or cautious macro sentiment.")
+    copper_c = (prices.get("Copper", {}) or {}).get("change")
+    if copper_c is not None:
+        if themes.get("china"): commentary.append("Copper is reacting to China-related headlines, with industrial activity remaining a key demand driver.")
+        elif copper_c > 1: commentary.append("Copper is firm, potentially reflecting improved global manufacturing sentiment.")
+        elif copper_c < -1: commentary.append("Copper is softer, hinting at weaker industrial demand or cautious macro sentiment.")
 
-    gold = prices["Gold"]["change"]
-    if gold is not None:
-        if themes["inflation"]:
-            commentary.append("Gold is responding to inflation and rate-related headlines, which continue to shape safe-haven demand.")
-        elif gold > 1:
-            commentary.append("Gold is gaining as investors seek safety amid broader macro uncertainty.")
-        elif gold < -1:
-            commentary.append("Gold is easing, suggesting reduced safe-haven demand or firmer yields.")
+    gold_c = (prices.get("Gold", {}) or {}).get("change")
+    if gold_c is not None:
+        if themes.get("inflation"): commentary.append("Gold is responding to inflation and rate-related headlines, which continue to shape safe-haven demand.")
+        elif gold_c > 1: commentary.append("Gold is gaining as investors seek safety amid broader macro uncertainty.")
+        elif gold_c < -1: commentary.append("Gold is easing, suggesting reduced safe-haven demand or firmer yields.")
 
-    if themes["weather"]:
-        commentary.append("Weather-related headlines are affecting agricultural markets, raising concerns over crop yields.")
-    if themes["ag_supply"]:
-        commentary.append("Grain supply headlines are impacting wheat and corn, reflecting geopolitical or export-related risks.")
-
-    if sent > 0.25:
-        commentary.append("Overall news sentiment is constructive, offering support across cyclical commodities.")
-    elif sent < -0.25:
-        commentary.append("Negative news sentiment is weighing on risk-sensitive commodities.")
-
-    if not commentary:
-        commentary.append("Commodity markets are steady, with no major headline-driven themes dominating today.")
+    if themes.get("weather"): commentary.append("Weather-related headlines are affecting agricultural markets, raising concerns over crop yields.")
+    if themes.get("ag_supply"): commentary.append("Grain supply headlines are impacting wheat and corn, reflecting geopolitical or export-related risks.")
+    if sent > 0.25: commentary.append("Overall news sentiment is constructive, offering support across cyclical commodities.")
+    elif sent < -0.25: commentary.append("Negative news sentiment is weighing on risk-sensitive commodities.")
+    if not commentary: commentary.append("Commodity markets are steady, with no major headline-driven themes dominating today.")
 
     for line in commentary:
         st.markdown(f"- {line}")
 
-
-# =========================================================
-# ======================= S&P500 TAB =======================
-# =========================================================
 
 with tabs[3]:
     render_sp500_tab()
@@ -1104,56 +1335,3 @@ with tabs[3]:
 
 with tabs[4]:
     render_flow_trading_tab()
-
-    # ── RISK OVERVIEW (from Risk tab) ───────────────────────────
-    st.markdown("---")
-    st.markdown("### 📊 Book Risk Overview")
-    st.caption("A summary of your current simulated trading book risk. Large positions relative to your daily volume are a warning sign — they expose you to significant mark-to-market losses if the market moves against you.")
-
-    inv_risk = st.session_state.get("inventory", {})
-    pnl_risk = st.session_state.get("pnl", {"spread_pnl": 0, "hedge_pnl": 0, "inventory_pnl": 0})
-    total_pnl_risk = sum(pnl_risk.values())
-
-    rp1, rp2, rp3, rp4 = st.columns(4)
-    for col, label, key, tip in [
-        (rp1, "Spread P&L",    "spread_pnl",    "Earned from bid/offer on every trade"),
-        (rp2, "Hedge P&L",     "hedge_pnl",     "P&L from hedges placed"),
-        (rp3, "Inventory P&L", "inventory_pnl", "Mark-to-market on open positions"),
-        (rp4, "Total P&L",     None,            "Your overall book P&L"),
-    ]:
-        val = total_pnl_risk if key is None else pnl_risk.get(key, 0)
-        cc  = "#00ff88" if val >= 0 else "#ff4d4d"
-        with col:
-            st.markdown(f"<div class='card'><div class='label'>{label}</div><div class='big-number' style='color:{cc};'>${val:,.0f}</div><div class='label' style='font-size:10px;'>{tip}</div></div>", unsafe_allow_html=True)
-
-    st.caption("**Spread P&L** is your guaranteed income — earned every time a client trades. **Inventory P&L** moves with the market and is the risky part. Great flow traders maximise spread income while keeping inventory P&L close to zero.")
-    st.markdown("")
-
-    if inv_risk and any(v != 0 for v in inv_risk.values()):
-        assets_r  = list(inv_risk.keys())
-        values_r  = [inv_risk[a] for a in assets_r]
-        fig_inv_r = go.Figure(go.Bar(
-            x=assets_r, y=values_r,
-            marker_color=["#00ff88" if v > 0 else "#ff4d4d" for v in values_r],
-            text=[f"${abs(v):,.0f}" for v in values_r], textposition="outside"
-        ))
-        fig_inv_r.update_layout(
-            template="plotly_dark", height=300,
-            title="Net Inventory Exposure (USD)",
-            yaxis_title="Net Position (USD)",
-            margin=dict(l=40,r=40,t=50,b=40),
-            yaxis=dict(gridcolor="#333"), xaxis=dict(showgrid=False)
-        )
-        st.plotly_chart(fig_inv_r, use_container_width=True)
-        st.caption("Green = long (you profit if price rises). Red = short (you profit if price falls). Keep bars close to zero — large bars mean big market risk.")
-
-        needs_hedge_r = {a: v for a, v in inv_risk.items() if abs(v) >= 500_000}
-        if needs_hedge_r:
-            st.markdown("#### ⚠️ Active Hedge Signals")
-            for asset, notional in needs_hedge_r.items():
-                direction = "LONG" if notional > 0 else "SHORT"
-                st.warning(f"**{asset}** — You are {direction} ${abs(notional):,.0f}. A 1% adverse move = ${abs(notional)*0.01:,.0f} loss. Use Compute Hedge below to reduce this.")
-        else:
-            st.success("✅ All positions within risk limits (under $500,000 per asset).")
-    else:
-        st.info("No open inventory. Add some client trades above to see your risk exposure here.")
