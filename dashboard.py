@@ -912,70 +912,37 @@ with tabs[1]:
         st.info("No news data available yet.")
     st.caption("These themes are extracted from today's headlines. Each active theme is a macro risk that could drive client flow — e.g. geopolitical risk pushes clients into gold and out of equities.")
     st.markdown("---")
+    st.markdown("---")
+    st.markdown("#### 🤖 AI Risk Narrative")
+    st.caption("Uses live market data and the risk monitors above to generate a single trader-ready risk summary.")
 
-    # ── SECTION 2: FLOW TRADING RISK ───────────────────────────
-    st.markdown("### 🏦 Section 2 — Flow Trading Risk")
-    st.caption("This mirrors what a junior flow trader at a bank sees. When a client trades, you take the other side and manage the resulting risk. Your inventory shows what you're holding, and the bar chart shows your market exposure.")
+    if st.button("🔄 Generate Risk Narrative", key="risk_narrative_btn"):
+        with st.spinner("Analysing risk themes..."):
+            try:
+                from gpt_layer import call_gpt_prose
+                risk_prompt = f"""You are a senior risk manager at a major investment bank writing a morning risk briefing.
 
-    st.markdown("#### Current Inventory Exposure")
-    inv = st.session_state.get("inventory", {})
+LIVE MARKET DATA:
+- VIX: {vix_price:.1f} ({vol_regime})
+- S&P 500: {spx_change:+.2f}% today
+- Copper: {copper_change:+.2f}%
+- Gold: {gold_change:+.2f}%
+- News Sentiment: {avg_sentiment:+.2f}
+- Risk Regime: {risk_label} (score: {risk_score:+.2f})
 
-    if inv and any(v != 0 for v in inv.values()):
-        assets  = list(inv.keys())
-        values  = [inv[a] for a in assets]
-        colours = ["#00ff88" if v > 0 else "#ff4d4d" for v in values]
-        fig_inv = go.Figure(go.Bar(
-            x=assets, y=values, marker_color=colours,
-            text=[f"${abs(v):,.0f}" for v in values], textposition="outside"
-        ))
-        fig_inv.update_layout(
-            template="plotly_dark", height=320,
-            title="Net Inventory (USD)", yaxis_title="Net Position (USD)",
-            margin=dict(l=40,r=40,t=40,b=40),
-            yaxis=dict(gridcolor="#333"), xaxis=dict(showgrid=False)
-        )
-        st.plotly_chart(fig_inv, use_container_width=True)
-        st.caption("Green = long (you profit if price rises). Red = short (you profit if price falls). Good flow traders keep bars close to zero — large bars mean significant market risk if prices move against you.")
-    else:
-        st.info("No open inventory positions. Go to the Flow Trading tab to simulate some client trades — they will appear here.")
-        st.caption("When you accept a client trade in the Flow Trading tab, your inventory updates here in real time. A flow trader's goal is to keep inventory balanced while collecting the bid/offer spread.")
+Write a concise 3-4 sentence risk narrative that:
+1. States the overall risk regime and what it means for flow traders today
+2. Highlights the most important risk and why it matters
+3. Gives one actionable observation for a flow trader
 
-    st.markdown("")
+Bloomberg style. Direct. Plain prose only."""
+                narrative = call_gpt_prose(risk_prompt)
+                st.session_state["risk_narrative"] = narrative or "Could not generate narrative — check OpenAI key."
+            except Exception as e:
+                st.session_state["risk_narrative"] = f"Error: {e}"
 
-    # P&L Summary
-    st.markdown("#### P&L Summary")
-    pnl       = st.session_state.get("pnl", {"spread_pnl": 0, "hedge_pnl": 0, "inventory_pnl": 0})
-    total_pnl = sum(pnl.values())
-    p1, p2, p3, p4 = st.columns(4)
-    for col, label, key, tip in [
-        (p1, "Spread P&L",    "spread_pnl",    "Earned from bid/offer on every client trade"),
-        (p2, "Hedge P&L",     "hedge_pnl",     "P&L from hedges placed to offset inventory risk"),
-        (p3, "Inventory P&L", "inventory_pnl", "Mark-to-market gain/loss on open positions"),
-        (p4, "Total P&L",     None,            "Your overall trading P&L"),
-    ]:
-        val = total_pnl if key is None else pnl.get(key, 0)
-        cc  = "#00ff88" if val >= 0 else "#ff4d4d"
-        with col:
-            st.markdown("<div class='card'>", unsafe_allow_html=True)
-            st.markdown(f"<div class='label'>{label}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='big-number' style='color:{cc};'>${val:,.0f}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='label' style='font-size:10px;'>{tip}</div>", unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-    st.caption("**Spread P&L** is guaranteed income you earn on every trade. **Inventory P&L** moves with the market and is risky. Great flow traders maximise spread income while keeping inventory P&L close to zero through hedging.")
-
-    st.markdown("")
-
-    # Hedge signals
-    st.markdown("#### Hedge Signals")
-    needs_hedge = {a: v for a, v in inv.items() if abs(v) >= 500_000}
-    if needs_hedge:
-        for asset, notional in needs_hedge.items():
-            direction = "LONG" if notional > 0 else "SHORT"
-            st.warning(f"⚠️ **{asset}** — You are {direction} ${abs(notional):,.0f}. Consider hedging in the Flow Trading tab.")
-        st.caption("A hedge signal fires when a position exceeds $500,000. A 1% adverse move = $5,000 loss. Go to Flow Trading → Compute Hedge to reduce this exposure.")
-    else:
-        st.success("✅ No hedge signals — all positions within risk limits.")
-        st.caption("Hedge signals appear when any single position exceeds $500,000 notional. Currently all positions are within acceptable limits.")
+    narrative = st.session_state.get("risk_narrative", "Click above to get an AI-powered summary of today's key risks.")
+    st.markdown(f"<div class='card' style='line-height:1.7; color:#DDDDDD;'>{narrative}</div>", unsafe_allow_html=True)
 
 
 with tabs[2]:
@@ -1419,3 +1386,69 @@ with tabs[3]:
 
 with tabs[4]:
     render_flow_trading_tab()
+
+    st.markdown("---")
+
+    # ── SECTION 2: FLOW TRADING RISK ───────────────────────────
+    st.markdown("### 🏦 Section 2 — Flow Trading Risk")
+    st.caption("This mirrors what a junior flow trader at a bank sees. When a client trades, you take the other side and manage the resulting risk. Your inventory shows what you're holding, and the bar chart shows your market exposure.")
+
+    st.markdown("#### Current Inventory Exposure")
+    inv = st.session_state.get("inventory", {})
+
+    if inv and any(v != 0 for v in inv.values()):
+        assets  = list(inv.keys())
+        values  = [inv[a] for a in assets]
+        colours = ["#00ff88" if v > 0 else "#ff4d4d" for v in values]
+        fig_inv = go.Figure(go.Bar(
+            x=assets, y=values, marker_color=colours,
+            text=[f"${abs(v):,.0f}" for v in values], textposition="outside"
+        ))
+        fig_inv.update_layout(
+            template="plotly_dark", height=320,
+            title="Net Inventory (USD)", yaxis_title="Net Position (USD)",
+            margin=dict(l=40,r=40,t=40,b=40),
+            yaxis=dict(gridcolor="#333"), xaxis=dict(showgrid=False)
+        )
+        st.plotly_chart(fig_inv, use_container_width=True)
+        st.caption("Green = long (you profit if price rises). Red = short (you profit if price falls). Good flow traders keep bars close to zero — large bars mean significant market risk if prices move against you.")
+    else:
+        st.info("No open inventory positions. Go to the Flow Trading tab to simulate some client trades — they will appear here.")
+        st.caption("When you accept a client trade in the Flow Trading tab, your inventory updates here in real time. A flow trader's goal is to keep inventory balanced while collecting the bid/offer spread.")
+
+    st.markdown("")
+
+    # P&L Summary
+    st.markdown("#### P&L Summary")
+    pnl       = st.session_state.get("pnl", {"spread_pnl": 0, "hedge_pnl": 0, "inventory_pnl": 0})
+    total_pnl = sum(pnl.values())
+    p1, p2, p3, p4 = st.columns(4)
+    for col, label, key, tip in [
+        (p1, "Spread P&L",    "spread_pnl",    "Earned from bid/offer on every client trade"),
+        (p2, "Hedge P&L",     "hedge_pnl",     "P&L from hedges placed to offset inventory risk"),
+        (p3, "Inventory P&L", "inventory_pnl", "Mark-to-market gain/loss on open positions"),
+        (p4, "Total P&L",     None,            "Your overall trading P&L"),
+    ]:
+        val = total_pnl if key is None else pnl.get(key, 0)
+        cc  = "#00ff88" if val >= 0 else "#ff4d4d"
+        with col:
+            st.markdown("<div class='card'>", unsafe_allow_html=True)
+            st.markdown(f"<div class='label'>{label}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='big-number' style='color:{cc};'>${val:,.0f}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='label' style='font-size:10px;'>{tip}</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+    st.caption("**Spread P&L** is guaranteed income you earn on every trade. **Inventory P&L** moves with the market and is risky. Great flow traders maximise spread income while keeping inventory P&L close to zero through hedging.")
+
+    st.markdown("")
+
+    # Hedge signals
+    st.markdown("#### Hedge Signals")
+    needs_hedge = {a: v for a, v in inv.items() if abs(v) >= 500_000}
+    if needs_hedge:
+        for asset, notional in needs_hedge.items():
+            direction = "LONG" if notional > 0 else "SHORT"
+            st.warning(f"⚠️ **{asset}** — You are {direction} ${abs(notional):,.0f}. Consider hedging in the Flow Trading tab.")
+        st.caption("A hedge signal fires when a position exceeds $500,000. A 1% adverse move = $5,000 loss. Go to Flow Trading → Compute Hedge to reduce this exposure.")
+    else:
+        st.success("✅ No hedge signals — all positions within risk limits.")
+        st.caption("Hedge signals appear when any single position exceeds $500,000 notional. Currently all positions are within acceptable limits.")
