@@ -127,14 +127,47 @@ st.markdown("---")
 # ══════════════════════════════════════════════
 
 FLOW_ASSETS = {
-    "S&P 500 (SPY)":    {"ticker": "SPY",   "spread_bps": 0.5,  "hedge_ticker": "SPY"},
-    "Gold (GC=F)":      {"ticker": "GC=F",  "spread_bps": 1.0,  "hedge_ticker": "GLD"},
-    "Brent Crude (BZ=F)":{"ticker": "BZ=F", "spread_bps": 2.0,  "hedge_ticker": "USO"},
-    "EUR/USD":          {"ticker": "EURUSD=X","spread_bps": 0.3, "hedge_ticker": "FXE"},
-    "US 10Y (IEF)":     {"ticker": "IEF",   "spread_bps": 0.5,  "hedge_ticker": "IEF"},
+    # Equities
+    "S&P 500 (SPY)":       {"ticker": "SPY",      "spread_bps": 0.5,  "hedge_ticker": "SPY",      "category": "Equities",    "description": "US large-cap equity index"},
+    "NASDAQ (QQQ)":        {"ticker": "QQQ",      "spread_bps": 0.5,  "hedge_ticker": "QQQ",      "category": "Equities",    "description": "US tech-heavy equity index"},
+    "FTSE 100 (ISF)":      {"ticker": "ISF.L",    "spread_bps": 1.0,  "hedge_ticker": "EWU",      "category": "Equities",    "description": "UK large-cap equity index"},
+    # FX
+    "EUR/USD":             {"ticker": "EURUSD=X", "spread_bps": 0.3,  "hedge_ticker": "FXE",      "category": "FX",          "description": "Euro vs US Dollar"},
+    "GBP/USD":             {"ticker": "GBPUSD=X", "spread_bps": 0.5,  "hedge_ticker": "FXB",      "category": "FX",          "description": "British Pound vs US Dollar"},
+    "USD/JPY":             {"ticker": "JPY=X",    "spread_bps": 0.3,  "hedge_ticker": "FXY",      "category": "FX",          "description": "US Dollar vs Japanese Yen"},
+    "USD/CHF":             {"ticker": "CHF=X",    "spread_bps": 0.5,  "hedge_ticker": "FXF",      "category": "FX",          "description": "US Dollar vs Swiss Franc (safe haven)"},
+    # Rates
+    "US 2Y (SHY)":         {"ticker": "SHY",      "spread_bps": 0.3,  "hedge_ticker": "SHY",      "category": "Rates",       "description": "US 2-year Treasury"},
+    "US 10Y (IEF)":        {"ticker": "IEF",      "spread_bps": 0.5,  "hedge_ticker": "IEF",      "category": "Rates",       "description": "US 10-year Treasury"},
+    "US 30Y (TLT)":        {"ticker": "TLT",      "spread_bps": 0.8,  "hedge_ticker": "TLT",      "category": "Rates",       "description": "US 30-year Treasury"},
+    # Commodities
+    "Brent Crude (BZ=F)":  {"ticker": "BZ=F",     "spread_bps": 2.0,  "hedge_ticker": "USO",      "category": "Commodities", "description": "Brent crude oil futures"},
+    "Gold (GC=F)":         {"ticker": "GC=F",     "spread_bps": 1.0,  "hedge_ticker": "GLD",      "category": "Commodities", "description": "Gold futures"},
+    "Copper (HG=F)":       {"ticker": "HG=F",     "spread_bps": 2.0,  "hedge_ticker": "CPER",     "category": "Commodities", "description": "Copper futures — global growth proxy"},
+    "Natural Gas (NG=F)":  {"ticker": "NG=F",     "spread_bps": 3.0,  "hedge_ticker": "UNG",      "category": "Commodities", "description": "Natural gas futures"},
 }
 
-HEDGE_THRESHOLD_USD = 500_000   # hedge when net inventory exceeds this
+HEDGE_THRESHOLD_USD = 500_000
+
+# Client order scenarios — realistic flow patterns
+CLIENT_ORDER_SCENARIOS = [
+    {"asset": "S&P 500 (SPY)",      "side": "Buy",  "notional": 2_000_000, "reason": "Pension fund rebalancing into equities end of quarter"},
+    {"asset": "S&P 500 (SPY)",      "side": "Sell", "notional": 5_000_000, "reason": "Hedge fund reducing equity exposure on macro uncertainty"},
+    {"asset": "Gold (GC=F)",        "side": "Buy",  "notional": 1_000_000, "reason": "Safe-haven demand — geopolitical headline risk rising"},
+    {"asset": "Gold (GC=F)",        "side": "Sell", "notional": 750_000,   "reason": "Risk-on rotation — client selling gold to buy equities"},
+    {"asset": "EUR/USD",            "side": "Buy",  "notional": 3_000_000, "reason": "Corporate FX hedge — European exporter selling USD receipts"},
+    {"asset": "EUR/USD",            "side": "Sell", "notional": 2_500_000, "reason": "Speculative short EUR on ECB dovish expectations"},
+    {"asset": "GBP/USD",            "side": "Buy",  "notional": 1_500_000, "reason": "UK institutional buying GBP ahead of BoE meeting"},
+    {"asset": "USD/JPY",            "side": "Sell", "notional": 2_000_000, "reason": "Risk-off flow — selling USD/JPY (buying Yen safe haven)"},
+    {"asset": "Brent Crude (BZ=F)", "side": "Buy",  "notional": 1_000_000, "reason": "Energy company hedging future production"},
+    {"asset": "Brent Crude (BZ=F)", "side": "Sell", "notional": 800_000,   "reason": "Airline hedging fuel costs — selling crude futures"},
+    {"asset": "US 10Y (IEF)",       "side": "Buy",  "notional": 4_000_000, "reason": "Flight to safety — institutional buying Treasuries"},
+    {"asset": "US 10Y (IEF)",       "side": "Sell", "notional": 2_000_000, "reason": "Duration reduction — client cutting bond exposure on inflation fears"},
+    {"asset": "NASDAQ (QQQ)",       "side": "Buy",  "notional": 1_500_000, "reason": "Tech sector rotation — client adding tech exposure"},
+    {"asset": "NASDAQ (QQQ)",       "side": "Sell", "notional": 3_000_000, "reason": "AI bubble concern — reducing concentrated tech position"},
+    {"asset": "Copper (HG=F)",      "side": "Buy",  "notional": 600_000,   "reason": "China stimulus optimism — buying copper as growth proxy"},
+    {"asset": "US 30Y (TLT)",       "side": "Buy",  "notional": 5_000_000, "reason": "Pension buying long duration to match liabilities"},
+]
 
 
 def init_flow_state():
@@ -253,70 +286,318 @@ def mark_to_market_inventory() -> float:
     return mtm_pnl
 
 def render_flow_trading_tab():
+    import random
+    from datetime import datetime as _dt
     init_flow_state()
 
-    st.header("Flow Trading Simulator")
+    st.markdown("## 🏦 Flow Trading Simulator")
+    st.caption("You are a junior flow trader at a major investment bank. Clients call with orders — you decide whether to accept, and then manage the resulting inventory risk. Your goal: maximise spread income while keeping your book balanced.")
+    st.markdown("---")
 
-    col1, col2 = st.columns(2)
+    # ── AUTO-GENERATE CLIENT ORDER ───────────────────────────────
+    st.markdown("### 📞 Incoming Client Order")
+    st.caption("A client order has arrived. Read the context, decide whether to accept it, and if so at what size. In real life you have seconds to decide — the market is moving.")
 
-    with col1:
-        st.subheader("New Client Flow")
+    # Generate or retrieve current order
+    if "current_order" not in st.session_state or st.session_state.get("order_accepted", False) or st.session_state.get("order_rejected", False):
+        # Pick a scenario weighted by current market conditions
+        scenario = random.choice(CLIENT_ORDER_SCENARIOS)
+        st.session_state["current_order"] = scenario
+        st.session_state["order_accepted"] = False
+        st.session_state["order_rejected"] = False
 
-        asset_label = st.selectbox("Asset", list(FLOW_ASSETS.keys()))
-        side = st.radio("Client side", ["Buy", "Sell"], horizontal=True)
-        notional = st.number_input("Notional (USD)", min_value=100_000.0, value=1_000_000.0, step=100_000.0)
+    order = st.session_state["current_order"]
+    asset_info = FLOW_ASSETS.get(order["asset"], {})
 
-        if st.button("Add Client Trade"):
-            add_client_trade(asset_label, side, notional)
-            st.success("Client trade added to book.")
+    # Order card
+    side_color = "#00ff88" if order["side"] == "Buy" else "#ff4d4d"
+    st.markdown(
+        f"<div class='card' style='border-left: 4px solid {side_color}; padding: 16px;'>"
+        f"<div style='font-size:13px; color:#888; margin-bottom:6px;'>INCOMING CLIENT ORDER — {_dt.now().strftime('%H:%M:%S')}</div>"
+        f"<div style='font-size:22px; font-weight:bold; color:{side_color};'>{order['side'].upper()} {order['asset']}</div>"
+        f"<div style='font-size:18px; color:#FFFFFF; margin-top:4px;'>${order['notional']:,.0f} notional</div>"
+        f"<div style='font-size:13px; color:#AAAAAA; margin-top:8px;'>📋 {order['reason']}</div>"
+        f"<div style='font-size:12px; color:#666; margin-top:6px;'>Category: {asset_info.get('category','—')} | Spread: {asset_info.get('spread_bps', 0):.1f} bps | {asset_info.get('description','')}</div>"
+        f"</div>",
+        unsafe_allow_html=True
+    )
 
-        if st.button("Hedge Inventory"):
+    # Spread earned if accepted
+    spread_earned = order["notional"] * (asset_info.get("spread_bps", 1) / 10_000)
+    current_inv   = st.session_state["inventory"].get(order["asset"], 0)
+    direction     = -1 if order["side"] == "Buy" else 1
+    new_inv       = current_inv + direction * order["notional"]
+
+    st.markdown("")
+    ic1, ic2, ic3 = st.columns(3)
+    with ic1:
+        st.markdown(f"<div class='card'><div class='label'>Spread Earned if Accepted</div><div class='big-number' style='color:#00ff88;'>${spread_earned:,.0f}</div></div>", unsafe_allow_html=True)
+    with ic2:
+        cur_color = "#00ff88" if abs(current_inv) < HEDGE_THRESHOLD_USD else "#ff4d4d"
+        st.markdown(f"<div class='card'><div class='label'>Current {order['asset']} Inventory</div><div class='big-number' style='color:{cur_color};'>${current_inv:,.0f}</div></div>", unsafe_allow_html=True)
+    with ic3:
+        new_color = "#00ff88" if abs(new_inv) < HEDGE_THRESHOLD_USD else "#FFDC00" if abs(new_inv) < HEDGE_THRESHOLD_USD * 2 else "#ff4d4d"
+        st.markdown(f"<div class='card'><div class='label'>Inventory After Trade</div><div class='big-number' style='color:{new_color};'>${new_inv:,.0f}</div></div>", unsafe_allow_html=True)
+
+    if abs(new_inv) >= HEDGE_THRESHOLD_USD:
+        st.warning(f"⚠️ Accepting this trade will push your {order['asset']} position to ${abs(new_inv):,.0f} — above the $500k hedge threshold. You'll need to hedge after accepting.")
+
+    st.markdown("")
+
+    # Allow size adjustment
+    accept_notional = st.slider(
+        "Adjust trade size (USD)",
+        min_value=100_000,
+        max_value=int(order["notional"] * 1.5),
+        value=int(order["notional"]),
+        step=100_000,
+        format="$%d"
+    )
+
+    col_acc, col_rej, col_new = st.columns(3)
+    with col_acc:
+        if st.button("✅ Accept Trade", type="primary"):
+            add_client_trade(order["asset"], order["side"], accept_notional)
+            st.session_state["order_accepted"] = True
+            st.session_state["trade_log"] = st.session_state.get("trade_log", [])
+            st.session_state["trade_log"].append({
+                "time":     _dt.now().strftime("%H:%M:%S"),
+                "action":   "ACCEPTED",
+                "asset":    order["asset"],
+                "side":     order["side"],
+                "notional": accept_notional,
+                "spread":   round(accept_notional * asset_info.get("spread_bps", 1) / 10_000, 2),
+                "reason":   order["reason"]
+            })
+            st.success(f"✅ Trade accepted! Spread earned: ${accept_notional * asset_info.get('spread_bps',1) / 10_000:,.0f}")
+            st.rerun()
+    with col_rej:
+        if st.button("❌ Reject Trade"):
+            st.session_state["order_rejected"] = True
+            st.session_state["trade_log"] = st.session_state.get("trade_log", [])
+            st.session_state["trade_log"].append({
+                "time":     _dt.now().strftime("%H:%M:%S"),
+                "action":   "REJECTED",
+                "asset":    order["asset"],
+                "side":     order["side"],
+                "notional": order["notional"],
+                "spread":   0,
+                "reason":   order["reason"]
+            })
+            st.info("Order rejected. Next client order incoming...")
+            st.rerun()
+    with col_new:
+        if st.button("🔄 New Order"):
+            del st.session_state["current_order"]
+            st.rerun()
+
+    st.markdown("---")
+
+    # ── MANUAL TRADE ENTRY ───────────────────────────────────────
+    with st.expander("➕ Enter Manual Trade", expanded=False):
+        st.caption("Enter your own trade manually — useful for testing specific scenarios.")
+        categories = sorted(set(v["category"] for v in FLOW_ASSETS.values()))
+        cat_filter = st.selectbox("Filter by asset class", ["All"] + categories)
+        filtered_assets = [k for k, v in FLOW_ASSETS.items() if cat_filter == "All" or v["category"] == cat_filter]
+        m_asset    = st.selectbox("Asset", filtered_assets, key="manual_asset")
+        m_side     = st.radio("Client side", ["Buy", "Sell"], horizontal=True, key="manual_side")
+        m_notional = st.number_input("Notional (USD)", min_value=100_000.0, value=1_000_000.0, step=100_000.0, key="manual_notional")
+        if st.button("Add Manual Trade"):
+            add_client_trade(m_asset, m_side, m_notional)
+            st.success(f"Manual trade added: {m_side} {m_asset} ${m_notional:,.0f}")
+            st.rerun()
+
+    st.markdown("---")
+
+    # ── INVENTORY & RISK MANAGEMENT ─────────────────────────────
+    st.markdown("### 📊 Your Trading Book")
+    inv = st.session_state["inventory"]
+    pnl = st.session_state["pnl"]
+    total_pnl = sum(pnl.values())
+
+    # P&L cards
+    p1, p2, p3, p4 = st.columns(4)
+    for col, label, key, tip in [
+        (p1, "Spread P&L",    "spread_pnl",    "Guaranteed — earned on every trade"),
+        (p2, "Hedge P&L",     "hedge_pnl",     "From hedges placed"),
+        (p3, "Inventory P&L", "inventory_pnl", "Mark-to-market"),
+        (p4, "Total P&L",     None,            "Your overall book"),
+    ]:
+        val = total_pnl if key is None else pnl.get(key, 0)
+        cc  = "#00ff88" if val >= 0 else "#ff4d4d"
+        with col:
+            st.markdown(f"<div class='card'><div class='label'>{label}</div><div class='big-number' style='color:{cc};'>${val:,.0f}</div><div class='label' style='font-size:10px;'>{tip}</div></div>", unsafe_allow_html=True)
+
+    st.markdown("")
+
+    if inv and any(v != 0 for v in inv.values()):
+        # Inventory bar chart grouped by category
+        assets_list  = [k for k, v in inv.items() if v != 0]
+        values_list  = [inv[k] for k in assets_list]
+        cats_list    = [FLOW_ASSETS.get(k, {}).get("category", "Other") for k in assets_list]
+        colors_list  = ["#00ff88" if v > 0 else "#ff4d4d" for v in values_list]
+
+        fig_inv = go.Figure(go.Bar(
+            x=assets_list, y=values_list,
+            marker_color=colors_list,
+            text=[f"${abs(v):,.0f}" for v in values_list],
+            textposition="outside",
+            customdata=cats_list,
+            hovertemplate="%{x}<br>%{customdata}<br>${%{y:,.0f}}<extra></extra>"
+        ))
+        fig_inv.add_hline(y=HEDGE_THRESHOLD_USD,  line_dash="dash", line_color="#FFDC00",
+                          annotation_text="Hedge threshold (+)", annotation_position="right")
+        fig_inv.add_hline(y=-HEDGE_THRESHOLD_USD, line_dash="dash", line_color="#FFDC00",
+                          annotation_text="Hedge threshold (−)", annotation_position="right")
+        fig_inv.update_layout(
+            template="plotly_dark", height=340,
+            title="Net Inventory by Asset (USD) — Yellow lines = hedge triggers",
+            margin=dict(l=40, r=100, t=50, b=60),
+            yaxis=dict(gridcolor="#333"),
+            xaxis=dict(showgrid=False, tickangle=-30)
+        )
+        st.plotly_chart(fig_inv, use_container_width=True)
+        st.caption("Green = long position (profit if price rises). Red = short position (profit if price falls). Yellow dashed lines = $500k hedge threshold. Bars crossing the threshold signal you need to hedge.")
+
+        # Hedge signals
+        needs_hedge = {a: v for a, v in inv.items() if abs(v) >= HEDGE_THRESHOLD_USD}
+        if needs_hedge:
+            st.markdown("#### ⚠️ Hedge Signals")
+            for asset, notional in needs_hedge.items():
+                direction = "LONG" if notional > 0 else "SHORT"
+                loss_1pct = abs(notional) * 0.01
+                st.warning(f"**{asset}** — {direction} ${abs(notional):,.0f} | 1% move against you = **${loss_1pct:,.0f} loss**")
+
+    else:
+        st.info("No open positions. Accept a client order above to build your book.")
+
+    st.markdown("")
+
+    # Hedge and MTM buttons
+    hb1, hb2, hb3 = st.columns(3)
+    with hb1:
+        if st.button("🛡️ Hedge All Positions"):
             hedges = compute_hedge_for_inventory()
             if hedges:
-                st.info("Hedges executed:")
                 for h in hedges:
-                    st.write(
-                        f"{h['hedge_side']} {h['hedge_ticker']} for ~${h['hedge_notional']:,.0f} "
-                        f"({h['units']:,.0f} units)"
-                    )
+                    st.success(f"Hedged {h['asset']}: {h['hedge_side']} ${h['hedge_notional']:,.0f} via {h['hedge_ticker']}")
             else:
-                st.info("No inventory to hedge.")
-
-        if st.button("Mark-to-Market Inventory"):
+                st.info("No positions above threshold to hedge.")
+            st.rerun()
+    with hb2:
+        if st.button("📊 Mark to Market"):
             mtm = mark_to_market_inventory()
-            st.write(f"Inventory MTM P&L this step: ${mtm:,.0f}")
+            color = "success" if mtm >= 0 else "error"
+            getattr(st, color)(f"MTM P&L this step: ${mtm:,.0f}")
+    with hb3:
+        if st.button("🔄 Reset Simulation"):
+            for key in ["inventory","flow_trades","hedge_trades","pnl","trade_log","current_order","sp500_summary","risk_narrative"]:
+                if key in st.session_state:
+                    del st.session_state[key]
+            st.success("Simulation reset.")
+            st.rerun()
 
-    with col2:
-        st.subheader("Current Inventory")
-        if st.session_state["inventory"]:
-            inv_df = pd.DataFrame(
-                [
-                    {"Underlying": k, "Net Notional (USD)": v}
-                    for k, v in st.session_state["inventory"].items()
-                ]
-            )
-            st.dataframe(inv_df, use_container_width=True)
+    st.markdown("---")
+
+    # ── TRADE LOG ────────────────────────────────────────────────
+    st.markdown("### 📋 Decision Log")
+    trade_log = st.session_state.get("trade_log", [])
+    if trade_log:
+        log_df = pd.DataFrame(trade_log)
+        # Colour accepted vs rejected
+        def highlight_row(row):
+            color = "background-color: rgba(0,255,136,0.08)" if row["action"] == "ACCEPTED" else "background-color: rgba(255,77,77,0.08)"
+            return [color] * len(row)
+        st.dataframe(log_df.style.apply(highlight_row, axis=1), use_container_width=True, hide_index=True)
+        accepted = sum(1 for t in trade_log if t["action"] == "ACCEPTED")
+        rejected = sum(1 for t in trade_log if t["action"] == "REJECTED")
+        total_spread = sum(t.get("spread", 0) for t in trade_log)
+        dl1, dl2, dl3 = st.columns(3)
+        with dl1:
+            st.markdown(f"<div class='card'><div class='label'>Orders Accepted</div><div class='big-number' style='color:#00ff88;'>{accepted}</div></div>", unsafe_allow_html=True)
+        with dl2:
+            st.markdown(f"<div class='card'><div class='label'>Orders Rejected</div><div class='big-number' style='color:#ff4d4d;'>{rejected}</div></div>", unsafe_allow_html=True)
+        with dl3:
+            st.markdown(f"<div class='card'><div class='label'>Total Spread Earned</div><div class='big-number' style='color:#00ff88;'>${total_spread:,.0f}</div></div>", unsafe_allow_html=True)
+    else:
+        st.info("No trades yet — accept or reject the incoming client order above.")
+
+    st.markdown("---")
+
+    # ── AI PERFORMANCE FEEDBACK ──────────────────────────────────
+    st.markdown("### 🤖 AI Trading Coach")
+    st.caption("Once you have made some decisions, get scored and coached by GPT on your risk management, decision quality, and what a real flow trader would have done differently.")
+
+    if st.button("📈 Get Performance Feedback", key="perf_feedback_btn"):
+        if not trade_log:
+            st.warning("Make some trading decisions first before requesting feedback.")
         else:
-            st.write("No inventory yet.")
+            with st.spinner("Analysing your trading decisions..."):
+                try:
+                    from gpt_layer import call_gpt_prose
+                    accepted_trades = [t for t in trade_log if t["action"] == "ACCEPTED"]
+                    rejected_trades = [t for t in trade_log if t["action"] == "REJECTED"]
+                    inv_summary = {k: v for k, v in st.session_state.get("inventory", {}).items() if v != 0}
 
-        st.subheader("P&L Breakdown")
-        pnl = st.session_state["pnl"]
-        pnl_df = pd.DataFrame(
-            [
-                {"Type": "Spread P&L", "Value": pnl["spread_pnl"]},
-                {"Type": "Hedge P&L", "Value": pnl["hedge_pnl"]},
-                {"Type": "Inventory P&L", "Value": pnl["inventory_pnl"]},
-                {"Type": "Total P&L", "Value": pnl["spread_pnl"] + pnl["hedge_pnl"] + pnl["inventory_pnl"]},
-            ]
-        )
-        st.dataframe(pnl_df, use_container_width=True)
+                    feedback_prompt = f"""You are a senior flow trading mentor at a major investment bank, reviewing a junior trader's simulation session.
 
-        st.subheader("Client Flow Log")
-        if st.session_state["flow_trades"]:
-            flow_df = pd.DataFrame(st.session_state["flow_trades"])
-            st.dataframe(flow_df, use_container_width=True)
-        else:
-            st.write("No client trades yet.")
+TRADING SESSION SUMMARY:
+- Orders accepted: {len(accepted_trades)}
+- Orders rejected: {len(rejected_trades)}
+- Total spread earned: ${sum(t.get('spread',0) for t in trade_log):,.0f}
+- Total P&L: ${total_pnl:,.0f}
+- Current open inventory: {inv_summary if inv_summary else "Flat (no open positions)"}
+
+ACCEPTED TRADES:
+{chr(10).join(f"- {t['side']} {t['asset']} ${t['notional']:,.0f} | {t['reason']}" for t in accepted_trades) if accepted_trades else "None"}
+
+REJECTED TRADES:
+{chr(10).join(f"- {t['side']} {t['asset']} ${t['notional']:,.0f} | {t['reason']}" for t in rejected_trades) if rejected_trades else "None"}
+
+Please provide:
+1. A SCORE out of 100 for overall risk management (format: "Risk Management Score: XX/100")
+2. A SCORE out of 100 for decision quality (format: "Decision Quality Score: XX/100")
+3. What the trader did well (2-3 sentences)
+4. What a real senior flow trader would have done differently (2-3 sentences)
+5. One specific lesson to take away from this session
+
+Be direct, constructive, and realistic. Use a mentor tone — tough but fair."""
+
+                    feedback = call_gpt_prose(feedback_prompt)
+                    st.session_state["trader_feedback"] = feedback or "Could not generate feedback."
+                except Exception as e:
+                    st.session_state["trader_feedback"] = f"Error: {e}"
+
+    feedback_text = st.session_state.get("trader_feedback", "Click above after making some trading decisions to get AI coaching feedback.")
+    st.markdown(f"<div class='card' style='line-height:1.8; color:#DDDDDD; white-space:pre-wrap;'>{feedback_text}</div>", unsafe_allow_html=True)
+
+    # Trader tip of the session
+    st.markdown("---")
+    with st.expander("📚 Flow Trading Guide — Key Concepts", expanded=False):
+        st.markdown("""
+**What is flow trading?**
+Flow traders (also called market makers) sit between clients and the market. When a client wants to buy or sell, you take the other side — immediately. You profit from the bid/offer spread on every trade. Your job is then to manage the resulting inventory risk.
+
+**The bid/offer spread**
+Every asset has a price you'll buy at (bid) and a price you'll sell at (offer). The difference is the spread — your guaranteed profit on every trade. Tighter spreads = more competitive but less profit per trade.
+
+**Inventory risk**
+When you take the other side of a client trade, you build up inventory. If a client buys $5m of S&P 500 from you, you're now short $5m of S&P 500. If the market rises, you lose money. This is inventory risk — and managing it is the core skill of flow trading.
+
+**Hedging**
+To reduce inventory risk, you hedge — placing an offsetting trade in the market. If you're short $5m S&P 500, you buy $5m SPY to hedge. The hedge costs money (you cross the spread yourself) but removes the market risk.
+
+**The flow trader's dilemma**
+- Accept every trade → maximise spread income but accumulate risk
+- Reject trades → no risk but no income either
+- The skill is knowing WHEN to accept, WHEN to reduce size, and WHEN to hedge immediately
+
+**Asset class nuances**
+- **FX**: Very liquid, tight spreads, but large notionals. Corporate hedgers are predictable; speculators are not.
+- **Rates**: Sensitive to macro news. Flight-to-safety flows can be very large and one-directional.
+- **Equities**: Index flows often tied to rebalancing. Large directional flows from hedge funds are dangerous to hold.
+- **Commodities**: Seasonal patterns matter. Producer hedging (airlines, energy companies) is regular and predictable.
+        """)
 
 
 # ---------- TABS INITIALIZATION ----------
