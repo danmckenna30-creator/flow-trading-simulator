@@ -127,68 +127,82 @@ st.markdown("---")
 # ══════════════════════════════════════════════
 
 FLOW_ASSETS = {
-    # Equities
-    "S&P 500 (SPY)":       {"ticker": "SPY",      "spread_bps": 0.5,  "hedge_ticker": "SPY",      "category": "Equities",    "description": "US large-cap equity index"},
-    "NASDAQ (QQQ)":        {"ticker": "QQQ",      "spread_bps": 0.5,  "hedge_ticker": "QQQ",      "category": "Equities",    "description": "US tech-heavy equity index"},
-    "FTSE 100 (ISF)":      {"ticker": "ISF.L",    "spread_bps": 1.0,  "hedge_ticker": "EWU",      "category": "Equities",    "description": "UK large-cap equity index"},
-    # FX
-    "EUR/USD":             {"ticker": "EURUSD=X", "spread_bps": 0.3,  "hedge_ticker": "FXE",      "category": "FX",          "description": "Euro vs US Dollar"},
-    "GBP/USD":             {"ticker": "GBPUSD=X", "spread_bps": 0.5,  "hedge_ticker": "FXB",      "category": "FX",          "description": "British Pound vs US Dollar"},
-    "USD/JPY":             {"ticker": "JPY=X",    "spread_bps": 0.3,  "hedge_ticker": "FXY",      "category": "FX",          "description": "US Dollar vs Japanese Yen"},
-    "USD/CHF":             {"ticker": "CHF=X",    "spread_bps": 0.5,  "hedge_ticker": "FXF",      "category": "FX",          "description": "US Dollar vs Swiss Franc (safe haven)"},
-    # Rates
-    "US 2Y (SHY)":         {"ticker": "SHY",      "spread_bps": 0.3,  "hedge_ticker": "SHY",      "category": "Rates",       "description": "US 2-year Treasury"},
-    "US 10Y (IEF)":        {"ticker": "IEF",      "spread_bps": 0.5,  "hedge_ticker": "IEF",      "category": "Rates",       "description": "US 10-year Treasury"},
-    "US 30Y (TLT)":        {"ticker": "TLT",      "spread_bps": 0.8,  "hedge_ticker": "TLT",      "category": "Rates",       "description": "US 30-year Treasury"},
-    # Commodities
-    "Brent Crude (BZ=F)":  {"ticker": "BZ=F",     "spread_bps": 2.0,  "hedge_ticker": "USO",      "category": "Commodities", "description": "Brent crude oil futures"},
-    "Gold (GC=F)":         {"ticker": "GC=F",     "spread_bps": 1.0,  "hedge_ticker": "GLD",      "category": "Commodities", "description": "Gold futures"},
-    "Copper (HG=F)":       {"ticker": "HG=F",     "spread_bps": 2.0,  "hedge_ticker": "CPER",     "category": "Commodities", "description": "Copper futures — global growth proxy"},
-    "Natural Gas (NG=F)":  {"ticker": "NG=F",     "spread_bps": 3.0,  "hedge_ticker": "UNG",      "category": "Commodities", "description": "Natural gas futures"},
+    "S&P 500 (SPY)":       {"ticker":"SPY",      "spread_bps":0.5,  "hedge_ticker":"SPY",  "category":"Equities",    "description":"US large-cap equity index",    "liquidity":50_000_000, "base_vol":0.012},
+    "NASDAQ (QQQ)":        {"ticker":"QQQ",      "spread_bps":0.5,  "hedge_ticker":"QQQ",  "category":"Equities",    "description":"US tech-heavy equity index",   "liquidity":30_000_000, "base_vol":0.016},
+    "FTSE 100 (ISF)":      {"ticker":"ISF.L",    "spread_bps":1.0,  "hedge_ticker":"EWU",  "category":"Equities",    "description":"UK large-cap equity index",    "liquidity":10_000_000, "base_vol":0.011},
+    "EUR/USD":             {"ticker":"EURUSD=X", "spread_bps":0.3,  "hedge_ticker":"FXE",  "category":"FX",          "description":"Euro vs US Dollar",            "liquidity":100_000_000,"base_vol":0.006},
+    "GBP/USD":             {"ticker":"GBPUSD=X", "spread_bps":0.5,  "hedge_ticker":"FXB",  "category":"FX",          "description":"British Pound vs US Dollar",   "liquidity":60_000_000, "base_vol":0.008},
+    "USD/JPY":             {"ticker":"JPY=X",    "spread_bps":0.3,  "hedge_ticker":"FXY",  "category":"FX",          "description":"US Dollar vs Japanese Yen",    "liquidity":80_000_000, "base_vol":0.007},
+    "USD/CHF":             {"ticker":"CHF=X",    "spread_bps":0.5,  "hedge_ticker":"FXF",  "category":"FX",          "description":"US Dollar vs Swiss Franc",     "liquidity":40_000_000, "base_vol":0.007},
+    "US 2Y (SHY)":         {"ticker":"SHY",      "spread_bps":0.3,  "hedge_ticker":"SHY",  "category":"Rates",       "description":"US 2-year Treasury",           "liquidity":80_000_000, "base_vol":0.003},
+    "US 10Y (IEF)":        {"ticker":"IEF",      "spread_bps":0.5,  "hedge_ticker":"IEF",  "category":"Rates",       "description":"US 10-year Treasury",          "liquidity":50_000_000, "base_vol":0.007},
+    "US 30Y (TLT)":        {"ticker":"TLT",      "spread_bps":0.8,  "hedge_ticker":"TLT",  "category":"Rates",       "description":"US 30-year Treasury",          "liquidity":30_000_000, "base_vol":0.012},
+    "Brent Crude (BZ=F)":  {"ticker":"BZ=F",     "spread_bps":2.0,  "hedge_ticker":"USO",  "category":"Commodities", "description":"Brent crude oil futures",      "liquidity":20_000_000, "base_vol":0.020},
+    "Gold (GC=F)":         {"ticker":"GC=F",     "spread_bps":1.0,  "hedge_ticker":"GLD",  "category":"Commodities", "description":"Gold futures",                 "liquidity":25_000_000, "base_vol":0.010},
+    "Copper (HG=F)":       {"ticker":"HG=F",     "spread_bps":2.0,  "hedge_ticker":"CPER", "category":"Commodities", "description":"Copper futures",               "liquidity":10_000_000, "base_vol":0.018},
+    "Natural Gas (NG=F)":  {"ticker":"NG=F",     "spread_bps":3.0,  "hedge_ticker":"UNG",  "category":"Commodities", "description":"Natural gas futures",          "liquidity":8_000_000,  "base_vol":0.035},
 }
 
 HEDGE_THRESHOLD_USD = 500_000
+MAX_INVENTORY_USD   = 5_000_000
 
-# Client order scenarios — realistic flow patterns
+DEFAULT_RISK_PARAMS = {
+    "slippage_min_bps":    1.0,
+    "slippage_max_bps":    8.0,
+    "latency_ms_min":      100,
+    "latency_ms_max":      2000,
+    "vol_multiplier":      1.0,
+    "impact_factor":       0.10,
+    "toxic_flow_prob":     0.20,
+    "toxic_jump_bps":      15.0,
+    "overnight_vol_scale": 1.5,
+}
+
 CLIENT_ORDER_SCENARIOS = [
-    {"asset": "S&P 500 (SPY)",      "side": "Buy",  "notional": 2_000_000, "reason": "Pension fund rebalancing into equities end of quarter"},
-    {"asset": "S&P 500 (SPY)",      "side": "Sell", "notional": 5_000_000, "reason": "Hedge fund reducing equity exposure on macro uncertainty"},
-    {"asset": "Gold (GC=F)",        "side": "Buy",  "notional": 1_000_000, "reason": "Safe-haven demand — geopolitical headline risk rising"},
-    {"asset": "Gold (GC=F)",        "side": "Sell", "notional": 750_000,   "reason": "Risk-on rotation — client selling gold to buy equities"},
-    {"asset": "EUR/USD",            "side": "Buy",  "notional": 3_000_000, "reason": "Corporate FX hedge — European exporter selling USD receipts"},
-    {"asset": "EUR/USD",            "side": "Sell", "notional": 2_500_000, "reason": "Speculative short EUR on ECB dovish expectations"},
-    {"asset": "GBP/USD",            "side": "Buy",  "notional": 1_500_000, "reason": "UK institutional buying GBP ahead of BoE meeting"},
-    {"asset": "USD/JPY",            "side": "Sell", "notional": 2_000_000, "reason": "Risk-off flow — selling USD/JPY (buying Yen safe haven)"},
-    {"asset": "Brent Crude (BZ=F)", "side": "Buy",  "notional": 1_000_000, "reason": "Energy company hedging future production"},
-    {"asset": "Brent Crude (BZ=F)", "side": "Sell", "notional": 800_000,   "reason": "Airline hedging fuel costs — selling crude futures"},
-    {"asset": "US 10Y (IEF)",       "side": "Buy",  "notional": 4_000_000, "reason": "Flight to safety — institutional buying Treasuries"},
-    {"asset": "US 10Y (IEF)",       "side": "Sell", "notional": 2_000_000, "reason": "Duration reduction — client cutting bond exposure on inflation fears"},
-    {"asset": "NASDAQ (QQQ)",       "side": "Buy",  "notional": 1_500_000, "reason": "Tech sector rotation — client adding tech exposure"},
-    {"asset": "NASDAQ (QQQ)",       "side": "Sell", "notional": 3_000_000, "reason": "AI bubble concern — reducing concentrated tech position"},
-    {"asset": "Copper (HG=F)",      "side": "Buy",  "notional": 600_000,   "reason": "China stimulus optimism — buying copper as growth proxy"},
-    {"asset": "US 30Y (TLT)",       "side": "Buy",  "notional": 5_000_000, "reason": "Pension buying long duration to match liabilities"},
+    {"asset":"S&P 500 (SPY)",      "side":"Buy",  "notional":2_000_000,"reason":"Pension fund rebalancing into equities end of quarter",       "toxic":False},
+    {"asset":"S&P 500 (SPY)",      "side":"Sell", "notional":5_000_000,"reason":"Hedge fund reducing equity exposure on macro uncertainty",     "toxic":True},
+    {"asset":"Gold (GC=F)",        "side":"Buy",  "notional":1_000_000,"reason":"Safe-haven demand — geopolitical headline risk rising",        "toxic":False},
+    {"asset":"Gold (GC=F)",        "side":"Sell", "notional":750_000,  "reason":"Risk-on rotation — client selling gold to buy equities",       "toxic":False},
+    {"asset":"EUR/USD",            "side":"Buy",  "notional":3_000_000,"reason":"Corporate FX hedge — European exporter selling USD receipts",  "toxic":False},
+    {"asset":"EUR/USD",            "side":"Sell", "notional":2_500_000,"reason":"Speculative short EUR on ECB dovish expectations",             "toxic":True},
+    {"asset":"GBP/USD",            "side":"Buy",  "notional":1_500_000,"reason":"UK institutional buying GBP ahead of BoE meeting",            "toxic":False},
+    {"asset":"USD/JPY",            "side":"Sell", "notional":2_000_000,"reason":"Risk-off flow — selling USD/JPY (buying Yen safe haven)",      "toxic":True},
+    {"asset":"Brent Crude (BZ=F)", "side":"Buy",  "notional":1_000_000,"reason":"Energy company hedging future production",                    "toxic":False},
+    {"asset":"Brent Crude (BZ=F)", "side":"Sell", "notional":800_000,  "reason":"Airline hedging fuel costs — selling crude futures",           "toxic":False},
+    {"asset":"US 10Y (IEF)",       "side":"Buy",  "notional":4_000_000,"reason":"Flight to safety — institutional buying Treasuries",           "toxic":False},
+    {"asset":"US 10Y (IEF)",       "side":"Sell", "notional":2_000_000,"reason":"Duration reduction — cutting bond exposure on inflation fears","toxic":True},
+    {"asset":"NASDAQ (QQQ)",       "side":"Buy",  "notional":1_500_000,"reason":"Tech sector rotation — client adding tech exposure",           "toxic":False},
+    {"asset":"NASDAQ (QQQ)",       "side":"Sell", "notional":3_000_000,"reason":"AI bubble concern — reducing concentrated tech position",      "toxic":True},
+    {"asset":"Copper (HG=F)",      "side":"Buy",  "notional":600_000,  "reason":"China stimulus optimism — buying copper as growth proxy",      "toxic":False},
+    {"asset":"US 30Y (TLT)",       "side":"Buy",  "notional":5_000_000,"reason":"Pension buying long duration to match liabilities",            "toxic":False},
 ]
 
 
+def _get_risk_params():
+    return st.session_state.get("risk_params", DEFAULT_RISK_PARAMS.copy())
+
+
 def init_flow_state():
-    """Initialise Streamlit session state for the flow trading simulator."""
     defaults = {
-        "inventory":   {},   # {asset_label: net_notional_usd}
-        "flow_trades": [],   # list of trade dicts
+        "inventory":    {},
+        "flow_trades":  [],
+        "hedge_trades": [],
+        "risk_params":  DEFAULT_RISK_PARAMS.copy(),
         "pnl": {
             "spread_pnl":    0.0,
-            "hedge_pnl":     0.0,
+            "slippage_pnl":  0.0,
+            "impact_pnl":    0.0,
             "inventory_pnl": 0.0,
+            "toxic_pnl":     0.0,
+            "overnight_pnl": 0.0,
         },
-        "hedge_trades": [],  # list of hedge dicts
     }
     for key, val in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = val
 
 
-def _get_spot(ticker: str) -> float | None:
-    """Fetch latest price for a ticker via yfinance."""
+def _get_spot(ticker):
     try:
         import yfinance as yf
         hist = yf.Ticker(ticker).history(period="2d")
@@ -199,91 +213,142 @@ def _get_spot(ticker: str) -> float | None:
     return None
 
 
-def add_client_trade(asset_label: str, side: str, notional: float):
-    """
-    Record a client trade, update inventory, and book spread P&L.
-    side: "Buy" (client buys, we sell) or "Sell" (client sells, we buy).
-    """
-    asset = FLOW_ASSETS[asset_label]
-    spread_bps = asset["spread_bps"]
+def _compute_vol_adjusted_spread(asset_info, rp):
+    """Risk 6: Widen spread when vol is high."""
+    base_vol      = asset_info.get("base_vol", 0.01) * rp["vol_multiplier"]
+    daily_vol_bps = base_vol / (252 ** 0.5) * 10_000
+    return max(asset_info["spread_bps"], daily_vol_bps * 0.20)
 
-    # Spread P&L: we earn the spread on every client trade
-    spread_earned = notional * (spread_bps / 10_000)
+
+def _compute_hedge_cost(asset_label, hedge_side, hedge_notional, rp):
+    """
+    Risk 1-3, 5: Compute realistic all-in hedge cost.
+    Includes slippage, latency drift, bid/ask, and market impact.
+    """
+    import random, math
+    asset     = FLOW_ASSETS[asset_label]
+    liquidity = asset.get("liquidity", 20_000_000)
+    base_vol  = asset.get("base_vol", 0.01) * rp["vol_multiplier"]
+
+    slippage_bps     = random.uniform(rp["slippage_min_bps"], rp["slippage_max_bps"])
+    latency_ms       = random.uniform(rp["latency_ms_min"], rp["latency_ms_max"])
+    vol_per_sec      = base_vol / math.sqrt(252 * 6.5 * 3600)
+    drift_bps        = abs(random.gauss(0, vol_per_sec * math.sqrt(latency_ms / 1000))) * 10_000
+    hedge_spread_bps = asset["spread_bps"] * 0.5
+    impact_bps       = rp["impact_factor"] * (hedge_notional / liquidity) * 10_000
+    total_bps        = slippage_bps + drift_bps + hedge_spread_bps + impact_bps
+
+    return {
+        "latency_ms":      round(latency_ms),
+        "slippage_bps":    round(slippage_bps, 2),
+        "drift_bps":       round(drift_bps, 2),
+        "impact_bps":      round(impact_bps, 2),
+        "total_cost_bps":  round(total_bps, 2),
+        "total_cost_usd":  round(hedge_notional * total_bps / 10_000, 2),
+        "slippage_usd":    round(hedge_notional * slippage_bps / 10_000, 2),
+        "impact_usd":      round(hedge_notional * impact_bps / 10_000, 2),
+    }
+
+
+def add_client_trade(asset_label, side, notional, is_toxic=False):
+    """Record trade with all risk mechanics applied."""
+    import random
+    rp    = _get_risk_params()
+    asset = FLOW_ASSETS[asset_label]
+
+    eff_spread      = _compute_vol_adjusted_spread(asset, rp)
+    spread_earned   = notional * (eff_spread / 10_000)
     st.session_state["pnl"]["spread_pnl"] += spread_earned
 
-    # Inventory: client Buy → we are short (negative); client Sell → we are long (positive)
     direction = -1 if side == "Buy" else 1
     inv = st.session_state["inventory"]
     inv[asset_label] = inv.get(asset_label, 0.0) + direction * notional
 
-    # Log the trade
+    forced_cost = 0.0
+    if abs(inv[asset_label]) > MAX_INVENTORY_USD:
+        excess      = abs(inv[asset_label]) - MAX_INVENTORY_USD
+        penalty_bps = rp["slippage_max_bps"] * 3
+        forced_cost = excess * (penalty_bps / 10_000)
+        st.session_state["pnl"]["slippage_pnl"] -= forced_cost
+        sign = 1 if inv[asset_label] > 0 else -1
+        inv[asset_label] = sign * MAX_INVENTORY_USD
+
+    toxic_loss  = 0.0
+    actual_toxic = is_toxic and random.random() < rp["toxic_flow_prob"]
+    if actual_toxic:
+        jump_bps   = rp["toxic_jump_bps"] * random.uniform(0.5, 1.5)
+        toxic_loss = notional * (jump_bps / 10_000)
+        st.session_state["pnl"]["toxic_pnl"] -= toxic_loss
+
     st.session_state["flow_trades"].append({
-        "asset":       asset_label,
-        "client_side": side,
-        "notional":    notional,
-        "spread_earned": round(spread_earned, 2),
+        "asset": asset_label, "client_side": side, "notional": notional,
+        "spread_earned": round(spread_earned, 2), "effective_spread": round(eff_spread, 2),
+        "toxic": actual_toxic, "toxic_loss": round(toxic_loss, 2),
+        "forced_cost": round(forced_cost, 2),
     })
 
+    return {"spread_earned": round(spread_earned,2), "toxic": actual_toxic,
+            "toxic_loss": round(toxic_loss,2), "forced_hedge": forced_cost>0,
+            "forced_cost": round(forced_cost,2)}
 
-def compute_hedge_for_inventory() -> list:
-    """
-    For any position exceeding HEDGE_THRESHOLD_USD, execute a hedge trade
-    and return a list of hedge descriptions.
-    """
+
+def compute_hedge_for_inventory():
+    """Hedge with realistic slippage, latency, impact costs."""
+    rp = _get_risk_params()
     hedges = []
     inv = st.session_state["inventory"]
-
     for asset_label, net_notional in list(inv.items()):
         if abs(net_notional) < HEDGE_THRESHOLD_USD:
             continue
-
-        asset = FLOW_ASSETS[asset_label]
-        hedge_ticker = asset["hedge_ticker"]
-        spot = _get_spot(hedge_ticker) or 100.0   # fallback price
-
-        # Hedge direction is opposite to our inventory
-        hedge_side = "Sell" if net_notional > 0 else "Buy"
+        hedge_side     = "Sell" if net_notional > 0 else "Buy"
         hedge_notional = abs(net_notional)
-        units = hedge_notional / spot
-
-        # Mark inventory as hedged (zero it out)
+        cost = _compute_hedge_cost(asset_label, hedge_side, hedge_notional, rp)
+        st.session_state["pnl"]["slippage_pnl"] -= cost["slippage_usd"]
+        st.session_state["pnl"]["impact_pnl"]   -= cost["impact_usd"]
         inv[asset_label] = 0.0
-
-        hedge = {
-            "asset":          asset_label,
-            "hedge_ticker":   hedge_ticker,
-            "hedge_side":     hedge_side,
-            "hedge_notional": round(hedge_notional, 2),
-            "units":          round(units, 4),
-            "spot_price":     round(spot, 4),
-        }
+        hedge = {"asset": asset_label, "hedge_side": hedge_side,
+                 "hedge_notional": round(hedge_notional,2), **cost}
         st.session_state["hedge_trades"].append(hedge)
         hedges.append(hedge)
-
     return hedges
 
 
-def mark_to_market_inventory() -> float:
-    """
-    MTM remaining (unhedged) inventory against current market prices.
-    Returns the incremental P&L for this MTM step.
-    """
-    mtm_pnl = 0.0
+def apply_overnight_risk():
+    """Risk 8: Random gap move on open inventory."""
+    import random
+    rp  = _get_risk_params()
     inv = st.session_state["inventory"]
-
+    total = 0.0
     for asset_label, net_notional in inv.items():
         if net_notional == 0:
             continue
-        asset = FLOW_ASSETS[asset_label]
-        spot = _get_spot(asset["ticker"])
-        if spot is None:
-            continue
-        # Simplified MTM: assume entry was at yesterday's close (1-tick move = 0.01%)
-        pnl_estimate = net_notional * 0.0001
-        mtm_pnl += pnl_estimate
+        base_vol = FLOW_ASSETS[asset_label].get("base_vol", 0.01) * rp["vol_multiplier"]
+        gap_pct  = random.gauss(0, base_vol * rp["overnight_vol_scale"])
+        pnl      = net_notional * gap_pct * random.choice([-1, 1])
+        total   += pnl
+    st.session_state["pnl"]["overnight_pnl"] += total
+    return total
 
-    st.session_state["pnl"]["inventory_pnl"] += mtm_pnl
-    return mtm_pnl
+
+def mark_to_market_inventory():
+    """MTM using realistic vol-based random walk."""
+    import random, math
+    rp  = _get_risk_params()
+    inv = st.session_state["inventory"]
+    mtm = 0.0
+    for asset_label, net_notional in inv.items():
+        if net_notional == 0:
+            continue
+        base_vol = FLOW_ASSETS[asset_label].get("base_vol", 0.01) * rp["vol_multiplier"]
+        move     = random.gauss(0, base_vol / math.sqrt(252 * 6.5 * 60))
+        mtm     += net_notional * move
+    st.session_state["pnl"]["inventory_pnl"] += mtm
+    return mtm
+
+
+def _total_pnl():
+    return sum(st.session_state.get("pnl", {}).values())
+
 
 def render_flow_trading_tab():
     import random
@@ -291,7 +356,25 @@ def render_flow_trading_tab():
     init_flow_state()
 
     st.markdown("## 🏦 Flow Trading Simulator")
-    st.caption("You are a junior flow trader at a major investment bank. Clients call with orders — you decide whether to accept, and then manage the resulting inventory risk. Your goal: maximise spread income while keeping your book balanced.")
+    st.caption("You are a junior flow trader at a major investment bank. Every hedge costs real money — slippage, market impact, latency drift, and toxic flow all eat into your P&L. Your goal: earn more in spread than you lose in hedging costs.")
+
+    # ── RISK PARAMETERS SIDEBAR ─────────────────────────────────
+    with st.sidebar:
+        st.markdown("## ⚙️ Risk Parameters")
+        st.caption("Tune the simulation to reflect different market conditions.")
+        rp = st.session_state.get("risk_params", DEFAULT_RISK_PARAMS.copy())
+        rp["slippage_min_bps"]    = st.slider("Min Slippage (bps)",       0.5,  5.0,  float(rp["slippage_min_bps"]),   0.5)
+        rp["slippage_max_bps"]    = st.slider("Max Slippage (bps)",       1.0,  20.0, float(rp["slippage_max_bps"]),   0.5)
+        rp["latency_ms_min"]      = st.slider("Min Latency (ms)",         50,   500,  int(rp["latency_ms_min"]),       50)
+        rp["latency_ms_max"]      = st.slider("Max Latency (ms)",         500,  5000, int(rp["latency_ms_max"]),       100)
+        rp["vol_multiplier"]      = st.slider("Vol Multiplier",           0.5,  3.0,  float(rp["vol_multiplier"]),     0.1)
+        rp["impact_factor"]       = st.slider("Market Impact Factor",     0.01, 0.5,  float(rp["impact_factor"]),      0.01)
+        rp["toxic_flow_prob"]     = st.slider("Toxic Flow Probability",   0.0,  0.5,  float(rp["toxic_flow_prob"]),    0.05)
+        rp["toxic_jump_bps"]      = st.slider("Toxic Jump (bps)",         5.0,  50.0, float(rp["toxic_jump_bps"]),     1.0)
+        rp["overnight_vol_scale"] = st.slider("Overnight Vol Scale",      0.5,  3.0,  float(rp["overnight_vol_scale"]),0.1)
+        st.session_state["risk_params"] = rp
+        st.markdown("---")
+        st.caption(f"**Max inventory:** ${MAX_INVENTORY_USD:,.0f} | **Hedge threshold:** ${HEDGE_THRESHOLD_USD:,.0f}")
     st.markdown("---")
 
     # ── AUTO-GENERATE CLIENT ORDER ───────────────────────────────
@@ -329,15 +412,23 @@ def render_flow_trading_tab():
     new_inv       = current_inv + direction * order["notional"]
 
     st.markdown("")
-    ic1, ic2, ic3 = st.columns(3)
+    rp = _get_risk_params()
+    eff_spread_bps = _compute_vol_adjusted_spread(asset_info, rp) if asset_info else asset_info.get("spread_bps", 1)
+    spread_earned  = order["notional"] * (eff_spread_bps / 10_000)
+    est_cost       = _compute_hedge_cost(order["asset"], "Buy" if direction < 0 else "Sell", order["notional"], rp) if asset_info else {}
+    est_net        = spread_earned - est_cost.get("total_cost_usd", 0)
+
+    ic1, ic2, ic3, ic4 = st.columns(4)
     with ic1:
-        st.markdown(f"<div class='card'><div class='label'>Spread Earned if Accepted</div><div class='big-number' style='color:#00ff88;'>${spread_earned:,.0f}</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='card'><div class='label'>Spread Earned</div><div class='big-number' style='color:#00ff88;'>${spread_earned:,.0f}</div><div class='label' style='font-size:10px;'>{eff_spread_bps:.1f}bps (vol-adjusted)</div></div>", unsafe_allow_html=True)
     with ic2:
-        cur_color = "#00ff88" if abs(current_inv) < HEDGE_THRESHOLD_USD else "#ff4d4d"
-        st.markdown(f"<div class='card'><div class='label'>Current {order['asset']} Inventory</div><div class='big-number' style='color:{cur_color};'>${current_inv:,.0f}</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='card'><div class='label'>Est. Hedge Cost</div><div class='big-number' style='color:#FFDC00;'>${est_cost.get('total_cost_usd',0):,.0f}</div><div class='label' style='font-size:10px;'>{est_cost.get('total_cost_bps',0):.1f}bps all-in</div></div>", unsafe_allow_html=True)
     with ic3:
-        new_color = "#00ff88" if abs(new_inv) < HEDGE_THRESHOLD_USD else "#FFDC00" if abs(new_inv) < HEDGE_THRESHOLD_USD * 2 else "#ff4d4d"
-        st.markdown(f"<div class='card'><div class='label'>Inventory After Trade</div><div class='big-number' style='color:{new_color};'>${new_inv:,.0f}</div></div>", unsafe_allow_html=True)
+        nc = "#00ff88" if est_net > 0 else "#ff4d4d"
+        st.markdown(f"<div class='card'><div class='label'>Est. Net P&L</div><div class='big-number' style='color:{nc};'>${est_net:,.0f}</div><div class='label' style='font-size:10px;'>Spread minus hedge cost</div></div>", unsafe_allow_html=True)
+    with ic4:
+        new_color = "#00ff88" if abs(new_inv) < HEDGE_THRESHOLD_USD else "#FFDC00" if abs(new_inv) < MAX_INVENTORY_USD else "#ff4d4d"
+        st.markdown(f"<div class='card'><div class='label'>Inventory After</div><div class='big-number' style='color:{new_color};'>${new_inv:,.0f}</div></div>", unsafe_allow_html=True)
 
     if abs(new_inv) >= HEDGE_THRESHOLD_USD:
         st.warning(f"⚠️ Accepting this trade will push your {order['asset']} position to ${abs(new_inv):,.0f} — above the $500k hedge threshold. You'll need to hedge after accepting.")
@@ -415,18 +506,27 @@ def render_flow_trading_tab():
     pnl = st.session_state["pnl"]
     total_pnl = sum(pnl.values())
 
-    # P&L cards
-    p1, p2, p3, p4 = st.columns(4)
-    for col, label, key, tip in [
-        (p1, "Spread P&L",    "spread_pnl",    "Guaranteed — earned on every trade"),
-        (p2, "Hedge P&L",     "hedge_pnl",     "From hedges placed"),
-        (p3, "Inventory P&L", "inventory_pnl", "Mark-to-market"),
-        (p4, "Total P&L",     None,            "Your overall book"),
-    ]:
-        val = total_pnl if key is None else pnl.get(key, 0)
-        cc  = "#00ff88" if val >= 0 else "#ff4d4d"
+    # Full P&L breakdown
+    st.markdown("#### P&L Breakdown")
+    pnl_items = [
+        ("Spread P&L",    "spread_pnl",    "Earned from bid/offer on every trade",   True),
+        ("Hedge Slippage","slippage_pnl",  "Lost to slippage + latency + bid/ask",   False),
+        ("Market Impact", "impact_pnl",    "Lost moving the market with large hedges",False),
+        ("Inventory MTM", "inventory_pnl", "Mark-to-market on open positions",        None),
+        ("Toxic Flow",    "toxic_pnl",     "Losses from informed client flow",         False),
+        ("Overnight",     "overnight_pnl", "Gap risk from holding inventory overnight",None),
+    ]
+    cols6 = st.columns(6)
+    for col, (label, key, tip, good) in zip(cols6, pnl_items):
+        val = pnl.get(key, 0)
+        cc  = "#00ff88" if (good is True and val >= 0) or (good is False and val >= 0) else "#ff4d4d" if val < 0 else "#FFDC00"
+        if good is None:
+            cc = "#00ff88" if val >= 0 else "#ff4d4d"
         with col:
-            st.markdown(f"<div class='card'><div class='label'>{label}</div><div class='big-number' style='color:{cc};'>${val:,.0f}</div><div class='label' style='font-size:10px;'>{tip}</div></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='card'><div class='label' style='font-size:10px;'>{label}</div><div style='font-size:18px;font-weight:bold;color:{cc};'>${val:,.0f}</div><div class='label' style='font-size:9px;'>{tip}</div></div>", unsafe_allow_html=True)
+
+    total_color = "#00ff88" if total_pnl >= 0 else "#ff4d4d"
+    st.markdown(f"<div class='card' style='text-align:center; margin-top:4px;'><div class='label'>TOTAL P&L</div><div class='big-number' style='color:{total_color};'>${total_pnl:,.0f}</div></div>", unsafe_allow_html=True)
 
     st.markdown("")
 
@@ -474,13 +574,13 @@ def render_flow_trading_tab():
     st.markdown("")
 
     # Hedge and MTM buttons
-    hb1, hb2, hb3 = st.columns(3)
+    hb1, hb2, hb3, hb4 = st.columns(4)
     with hb1:
         if st.button("🛡️ Hedge All Positions"):
             hedges = compute_hedge_for_inventory()
             if hedges:
                 for h in hedges:
-                    st.success(f"Hedged {h['asset']}: {h['hedge_side']} ${h['hedge_notional']:,.0f} via {h['hedge_ticker']}")
+                    st.warning(f"Hedged {h['asset']}: {h['hedge_side']} ${h['hedge_notional']:,.0f} | Cost: ${h['total_cost_usd']:,.0f} ({h['total_cost_bps']:.1f}bps) | Latency: {h['latency_ms']}ms")
             else:
                 st.info("No positions above threshold to hedge.")
             st.rerun()
@@ -490,10 +590,15 @@ def render_flow_trading_tab():
             color = "success" if mtm >= 0 else "error"
             getattr(st, color)(f"MTM P&L this step: ${mtm:,.0f}")
     with hb3:
+        if st.button("🌙 Apply Overnight Risk"):
+            gap_pnl = apply_overnight_risk()
+            color = "success" if gap_pnl >= 0 else "error"
+            getattr(st, color)(f"Overnight gap P&L: ${gap_pnl:,.0f}")
+            st.rerun()
+    with hb4:
         if st.button("🔄 Reset Simulation"):
-            for key in ["inventory","flow_trades","hedge_trades","pnl","trade_log","current_order","sp500_summary","risk_narrative"]:
-                if key in st.session_state:
-                    del st.session_state[key]
+            for key in ["inventory","flow_trades","hedge_trades","pnl","trade_log","current_order","sp500_summary","risk_narrative","trader_feedback"]:
+                st.session_state.pop(key, None)
             st.success("Simulation reset.")
             st.rerun()
 
