@@ -635,43 +635,138 @@ with tabs[0]:
             st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("### Yield Curve")
+    st.caption("The yield curve shows what interest rate the US government pays to borrow money at different time horizons. Its shape is one of the most watched signals in finance — it tells us what the market expects for growth, inflation, and recession risk.")
+
     curve = get_yield_curve()
     maturities = ["2Y", "5Y", "10Y", "30Y"]
-    yields = [curve[m] for m in maturities]
-
-    fig = go.Figure()
-    fig.add_trace(
-        go.Scatter(
-            x=maturities, y=yields, mode="lines+markers",
-            line=dict(color="#00c3ff", width=3),
-            marker=dict(size=10, color="#ffffff", line=dict(width=2, color="#00c3ff")),
-        )
-    )
-    fig.update_layout(
-        template="plotly_dark", height=350, margin=dict(l=40, r=40, t=40, b=40),
-        xaxis_title="Maturity", yaxis_title="Yield (%)",
-        xaxis=dict(showgrid=False), yaxis=dict(showgrid=True, gridcolor="#333333"),
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    yields     = [curve[m] for m in maturities]
+    normal_yields = [2.5, 2.8, 3.0, 3.2]  # pre-2022 typical normal curve
 
     slope_2s10s = curve["10Y"] - curve["2Y"]
     slope_5s30s = curve["30Y"] - curve["5Y"]
+    is_inverted = slope_2s10s < 0
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.markdown("<div class='label'>2s10s Spread</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='big-number'>{slope_2s10s:.2f} bps</div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+    if slope_2s10s > 0.5:
+        curve_shape, shape_color = "STEEP",    "#00ff88"
+        shape_meaning = "Strong growth expectations — long-term borrowing costs well above short-term. Historically positive for banks and risk assets."
+    elif slope_2s10s > 0:
+        curve_shape, shape_color = "NORMAL",   "#FFDC00"
+        shape_meaning = "Slightly positive slope — markets are broadly comfortable with the outlook, though not strongly bullish on growth."
+    elif slope_2s10s > -0.25:
+        curve_shape, shape_color = "FLAT",     "#FF8C00"
+        shape_meaning = "Flat curve signals uncertainty — markets aren't sure whether growth or recession lies ahead. Often a precursor to inversion."
+    else:
+        curve_shape, shape_color = "INVERTED", "#ff4d4d"
+        shape_meaning = "Inverted — short-term rates above long-term. Has preceded every US recession in the last 50 years. The market expects rates to fall, meaning a slowdown is coming."
 
-    with col2:
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.markdown("<div class='label'>5s30s Spread</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='big-number'>{slope_5s30s:.2f} bps</div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+    # Status cards
+    yc1, yc2, yc3, yc4 = st.columns(4)
+    with yc1:
+        st.markdown(f"<div class='card'><div class='label'>Curve Shape</div><div class='big-number' style='color:{shape_color};'>{curve_shape}</div></div>", unsafe_allow_html=True)
+    with yc2:
+        c = "#00ff88" if slope_2s10s > 0 else "#ff4d4d"
+        st.markdown(f"<div class='card'><div class='label'>2s10s Spread</div><div class='big-number' style='color:{c};'>{slope_2s10s:+.2f}%</div><div class='label' style='font-size:10px;'>10Y minus 2Y</div></div>", unsafe_allow_html=True)
+    with yc3:
+        c = "#00ff88" if slope_5s30s > 0 else "#ff4d4d"
+        st.markdown(f"<div class='card'><div class='label'>5s30s Spread</div><div class='big-number' style='color:{c};'>{slope_5s30s:+.2f}%</div><div class='label' style='font-size:10px;'>30Y minus 5Y</div></div>", unsafe_allow_html=True)
+    with yc4:
+        rec_signal = "⚠️ WARNING" if is_inverted else "✅ CLEAR"
+        rec_color  = "#ff4d4d" if is_inverted else "#00ff88"
+        st.markdown(f"<div class='card'><div class='label'>Recession Signal</div><div class='big-number' style='color:{rec_color};'>{rec_signal}</div></div>", unsafe_allow_html=True)
 
-    if slope_2s10s < 0:
-        st.markdown("<p style='color:#ff4d4d; font-weight:bold; font-size:18px;'>⚠️ Yield curve inverted (10-year Treasury yield < 2-year Treasury yield)</p>", unsafe_allow_html=True)
+    st.markdown(f"<div class='card' style='color:#DDDDDD; margin-bottom:12px;'>📌 <strong>What this means right now:</strong> {shape_meaning}</div>", unsafe_allow_html=True)
+
+    # Chart — current vs normal
+    fig_yc = go.Figure()
+    fig_yc.add_trace(go.Scatter(
+        x=maturities, y=normal_yields, mode="lines+markers",
+        name="Normal curve (pre-2022)",
+        line=dict(color="#555555", width=2, dash="dash"),
+        marker=dict(size=7, color="#555555"),
+    ))
+    fig_yc.add_trace(go.Scatter(
+        x=maturities, y=yields, mode="lines+markers+text",
+        name="Current curve",
+        line=dict(color="#00c3ff", width=3),
+        marker=dict(size=10, color="#ffffff", line=dict(width=2, color="#00c3ff")),
+        text=[f"{y:.2f}%" for y in yields], textposition="top center"
+    ))
+    fig_yc.add_trace(go.Scatter(
+        x=maturities + maturities[::-1],
+        y=yields + normal_yields[::-1],
+        fill="toself", fillcolor="rgba(0,195,255,0.07)",
+        line=dict(color="rgba(0,0,0,0)"), showlegend=False, hoverinfo="skip"
+    ))
+    fig_yc.update_layout(
+        template="plotly_dark", height=360,
+        margin=dict(l=40, r=40, t=50, b=40),
+        xaxis_title="Maturity", yaxis_title="Yield (%)",
+        xaxis=dict(showgrid=False),
+        yaxis=dict(showgrid=True, gridcolor="#333333"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        title="US Treasury Yield Curve — Current vs Normal"
+    )
+    st.plotly_chart(fig_yc, use_container_width=True)
+    st.caption("**Blue line** = today's curve. **Grey dashed** = typical pre-2022 normal for comparison. The shaded gap shows how far current yields deviate from normal. When the blue line dips below the grey at the short end, the Fed has pushed short-term rates unusually high — a classic late-cycle signal.")
+
+    if is_inverted:
+        st.error("⚠️ **Yield curve inverted.** 2-year yield is above the 10-year. This has preceded every US recession in the past 50 years. Flow traders should expect increased demand for safe-haven assets (gold, USD, government bonds) and reduced risk appetite in equities and credit.")
+    st.markdown("---")
+
+    with st.expander("📚 What is the yield curve? (Beginner guide)", expanded=False):
+        st.markdown("""
+**The basics:**
+Governments borrow money by issuing bonds. A 2-year bond = borrow for 2 years. A 10-year bond = 10 years. The yield is the interest rate paid.
+
+**Why the shape matters:**
+Normally, longer bonds pay *higher* yields — you want more compensation for locking money away longer. This creates an upward-sloping "normal" curve.
+
+**What inversion means:**
+When short-term yields rise *above* long-term yields, the curve inverts. This happens when central banks hike short-term rates aggressively to fight inflation. Investors then expect a slowdown will force rate cuts — so they buy long bonds, pushing long-term yields *down*.
+
+**The four shapes:**
+- 🟢 **Steep** — economy expected to grow strongly. Good for banks and risk assets.
+- 🟡 **Normal** — standard environment, moderate growth expected.
+- 🟠 **Flat** — uncertainty. Credit starts to tighten.
+- 🔴 **Inverted** — recession signal. Every US recession since 1970 was preceded by inversion.
+
+**For flow traders:**
+An inverted or flattening curve shifts client flows towards safe assets. Expect more demand for gold, Treasuries, and USD — and less for equities and high-yield bonds.
+        """)
+
+    st.markdown("---")
+    st.markdown("#### 🤖 AI Yield Curve Commentary")
+    st.caption("GPT analyses the current curve shape and what it signals for markets and flow traders.")
+
+    if st.button("🔄 Generate Yield Curve Commentary", key="yield_commentary_btn"):
+        with st.spinner("Analysing yield curve..."):
+            try:
+                from gpt_layer import call_gpt_prose
+                yc_prompt = f"""You are a senior fixed income strategist at a major investment bank.
+
+CURRENT US TREASURY YIELD CURVE:
+- 2Y yield: {curve["2Y"]:.2f}%
+- 5Y yield: {curve["5Y"]:.2f}%
+- 10Y yield: {curve["10Y"]:.2f}%
+- 30Y yield: {curve["30Y"]:.2f}%
+- 2s10s spread: {slope_2s10s:+.2f}% ({"INVERTED" if is_inverted else "positive"})
+- 5s30s spread: {slope_5s30s:+.2f}%
+- Curve shape: {curve_shape}
+
+Write a concise 3-4 sentence commentary that:
+1. Describes what the current curve shape tells us about growth and inflation expectations
+2. Explains what this means for a flow trader — likely client behaviour today
+3. Flags the single most important thing to watch on the yield curve right now
+
+Bloomberg terminal style. Direct and professional. Plain prose only."""
+
+                yc_commentary = call_gpt_prose(yc_prompt)
+                st.session_state["yield_commentary"] = yc_commentary or "Could not generate commentary — check OpenAI key."
+            except Exception as e:
+                st.session_state["yield_commentary"] = f"Error: {e}"
+
+    yc_text = st.session_state.get("yield_commentary", "Click above to generate an AI commentary on what the current yield curve signals for markets.")
+    st.markdown(f"<div class='card' style='line-height:1.7; color:#DDDDDD;'>{yc_text}</div>", unsafe_allow_html=True)
 
 
 # =========================================================
@@ -682,12 +777,11 @@ with tabs[1]:
     st.markdown("## Risk Monitor")
     st.markdown("---")
 
-    vix_price     = (prices.get("VIX",        {}) or {}).get("price") or 20
-    spx_change    = (prices.get("S&P 500",     {}) or {}).get("change") or 0
-    usdjpy_change = (prices.get("USDJPY",      {}) or {}).get("change") or 0
-    oil_change    = (prices.get("Brent Crude", {}) or {}).get("change") or 0
-    copper_change = (prices.get("Copper",      {}) or {}).get("change") or 0
-    gold_change   = (prices.get("Gold",        {}) or {}).get("change") or 0
+    vix_price     = (prices.get("VIX",          {}) or {}).get("price") or 20
+    spx_change    = (prices.get("S&P 500",       {}) or {}).get("change") or 0
+    usdjpy_change = (prices.get("USDJPY",        {}) or {}).get("change") or 0
+    oil_change    = (prices.get("Brent Crude",   {}) or {}).get("change") or 0
+    copper_change = (prices.get("Copper",        {}) or {}).get("change") or 0
     avg_sentiment = news_df["sentiment"].mean() if news_df is not None and "sentiment" in news_df.columns else 0
 
     risk_score = (
@@ -707,11 +801,9 @@ with tabs[1]:
     elif vix_price <= 25: vol_regime, vol_color = "NORMAL VOL", "#FFDC00"
     else:                 vol_regime, vol_color = "HIGH VOL",   "#ff4d4d"
 
-    # ════════════════════════════════════════════════════════════
-    # SECTION 1 — MARKET RISK REGIME
-    # ════════════════════════════════════════════════════════════
-    st.markdown("### 📊 Section 1 — Market Risk Regime")
-    st.caption("A real-time snapshot of where markets sit on the risk spectrum. As a flow trader, this is your morning orientation — it tells you the likely direction of client flows before the phone even rings.")
+    # ── SECTION 1: MARKET RISK ──────────────────────────────────
+    st.markdown("### 📊 Section 1 — Market Risk Overview")
+    st.caption("This section shows the overall market environment. As a flow trader, this tells you whether clients are likely buying risk assets (stocks, oil, copper) or selling them for safety (gold, USD, bonds).")
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
@@ -722,7 +814,7 @@ with tabs[1]:
         st.markdown("</div>", unsafe_allow_html=True)
     with c2:
         st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.markdown("<div class='label'>VIX — Fear Index</div>", unsafe_allow_html=True)
+        st.markdown("<div class='label'>VIX (Fear Index)</div>", unsafe_allow_html=True)
         st.markdown(f"<div class='big-number'>{vix_price:.1f}</div>", unsafe_allow_html=True)
         st.markdown(f"<div style='color:{vol_color}; font-weight:bold;'>{vol_regime}</div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
@@ -739,320 +831,162 @@ with tabs[1]:
         st.markdown(f"<div class='big-number' style='color:{sc2};'>{avg_sentiment:+.2f}</div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-    st.caption("**Risk Score** blends equity, copper, oil, FX and news sentiment. Above +0.3 = risk-on. Below -0.3 = risk-off. **VIX** below 15 = calm, above 25 = fear.")
-    st.markdown("")
-
-    col_gauge, col_fx = st.columns([1, 1])
-    with col_gauge:
-        st.markdown("#### Regime Gauge")
-        fig_gauge = go.Figure(go.Indicator(
-            mode="gauge+number+delta", value=risk_score, delta={"reference": 0},
-            gauge={
-                "axis": {"range": [-2, 2], "tickcolor": "#888"},
-                "bar":  {"color": "#00c3ff"},
-                "steps": [
-                    {"range": [-2,   -0.3], "color": "#ff4d4d"},
-                    {"range": [-0.3,  0.3], "color": "#333333"},
-                    {"range": [0.3,   2.0], "color": "#00ff88"},
-                ],
-            },
-            title={"text": "Risk Score", "font": {"color": "#ccc"}}
-        ))
-        fig_gauge.update_layout(
-            template="plotly_dark", height=260,
-            margin=dict(l=20, r=20, t=40, b=20),
-            paper_bgcolor="rgba(0,0,0,0)", font={"color": "#ccc"}
-        )
-        st.plotly_chart(fig_gauge, use_container_width=True)
-        st.caption("Red = risk-off, Green = risk-on. In risk-on, clients buy equities/commodities. In risk-off, flows go into gold, bonds, and USD.")
-
-    with col_fx:
-        st.markdown("#### FX Risk Pairs")
-        st.markdown("")
-        for pair in ["USDJPY", "GBPUSD", "EURUSD"]:
-            item   = (prices.get(pair, {}) or {})
-            price  = item.get("price")
-            change = item.get("change") or 0
-            color  = "#00ff88" if change > 0 else "#ff4d4d" if change < 0 else "#fff"
-            arrow  = "▲" if change > 0 else "▼" if change < 0 else "–"
-            st.markdown(
-                f"<div class='card' style='margin-bottom:8px;'>"
-                f"<span class='label'>{pair}</span>&nbsp;&nbsp;"
-                f"<strong>{price if price else 'N/A'}</strong>&nbsp;&nbsp;"
-                f"<span style='color:{color};'>{arrow} {abs(change)}%</span>"
-                f"</div>", unsafe_allow_html=True
-            )
-        st.caption("USD/JPY rising = risk-on. GBP/EUR rising = dollar weakening, positive for global risk.")
-
+    st.caption("**Risk Score** blends equity moves, copper, oil, FX and news sentiment into a single number. Above +0.3 = risk-on. Below -0.3 = risk-off. **VIX** below 15 is calm, above 25 means traders are scared.")
     st.markdown("---")
 
+    # Regime Gauge
+    st.markdown("#### Regime Gauge")
+    fig_gauge = go.Figure(go.Indicator(
+        mode="gauge+number+delta",
+        value=risk_score,
+        delta={"reference": 0},
+        gauge={
+            "axis": {"range": [-2, 2], "tickcolor": "#888"},
+            "bar":  {"color": "#00c3ff"},
+            "steps": [
+                {"range": [-2,   -0.3], "color": "#ff4d4d"},
+                {"range": [-0.3,  0.3], "color": "#333333"},
+                {"range": [0.3,   2.0], "color": "#00ff88"},
+            ],
+            "threshold": {"line": {"color": "white", "width": 3}, "value": risk_score}
+        },
+        title={"text": "Risk Score", "font": {"color": "#ccc"}}
+    ))
+    fig_gauge.update_layout(
+        template="plotly_dark", height=280,
+        margin=dict(l=40, r=40, t=40, b=20),
+        paper_bgcolor="rgba(0,0,0,0)", font={"color": "#ccc"}
+    )
+    st.plotly_chart(fig_gauge, use_container_width=True)
+    st.caption("The gauge shows where markets sit between full risk-off (red) and risk-on (green). As a flow trader this predicts which way client orders will skew — in risk-on environments expect more equity and commodity buying.")
+    st.markdown("---")
+
+    # Heatmap
     st.markdown("#### Cross-Asset Heatmap")
-    heatmap_assets  = ["VIX", "S&P 500", "USDJPY", "Brent Crude", "Copper", "Gold", "FTSE 100"]
+    heatmap_assets  = ["VIX", "S&P 500", "USDJPY", "Brent Crude", "Copper", "Gold"]
     heatmap_changes = [(prices.get(a, {}) or {}).get("change") or 0 for a in heatmap_assets]
     fig_heat = go.Figure(go.Heatmap(
         z=[heatmap_changes], x=heatmap_assets, y=["% Change"],
         colorscale=[[0.0,"#ff4d4d"],[0.5,"#111111"],[1.0,"#00ff88"]],
-        zmid=0, text=[[f"{v:+.2f}%" for v in heatmap_changes]],
+        zmid=0,
+        text=[[f"{v:+.2f}%" for v in heatmap_changes]],
         texttemplate="%{text}", showscale=True
     ))
-    fig_heat.update_layout(template="plotly_dark", height=150, margin=dict(l=40,r=40,t=10,b=40))
+    fig_heat.update_layout(template="plotly_dark", height=160, margin=dict(l=40,r=40,t=20,b=40))
     st.plotly_chart(fig_heat, use_container_width=True)
-    st.caption("Red = falling, Green = rising. Copper and S&P green together = strong risk-on. Gold rising while equities fall = flight to safety.")
+    st.caption("Red = falling today, Green = rising. VIX rising (red) is bad — fear is up. Copper and S&P 500 rising together = strong risk-on signal. Gold rising while equities fall = classic flight to safety.")
     st.markdown("---")
 
-    # ════════════════════════════════════════════════════════════
-    # SECTION 2 — DEEP RISK INTELLIGENCE
-    # ════════════════════════════════════════════════════════════
-    st.markdown("### 🧠 Section 2 — Deep Risk Intelligence")
-    st.caption("Three structural risks that don't show up in daily price moves but can cause sudden market dislocations. These are the themes a senior risk manager would flag in a morning meeting.")
-
-    @st.cache_data(ttl=1800)
-    def get_mega_cap_data():
-        import yfinance as yf
-        results = {}
-        try:
-            spx = yf.Ticker("^GSPC").history(period="5d")
-            results["spx_5d"] = float(((spx["Close"].iloc[-1] / spx["Close"].iloc[0]) - 1) * 100) if len(spx) >= 2 else 0
-        except Exception:
-            results["spx_5d"] = 0
-        mega = {"AAPL":"Apple","MSFT":"Microsoft","NVDA":"NVIDIA","GOOGL":"Alphabet","META":"Meta","AMZN":"Amazon","TSLA":"Tesla"}
-        changes = {}
-        for ticker, name in mega.items():
-            try:
-                hist = yf.Ticker(ticker).history(period="5d")
-                if len(hist) >= 2:
-                    changes[name] = float(((hist["Close"].iloc[-1] / hist["Close"].iloc[0]) - 1) * 100)
-            except Exception:
-                changes[name] = 0
-        results["mega_changes"] = changes
-        return results
-
-    mega_data     = get_mega_cap_data()
-    mega_changes  = mega_data.get("mega_changes", {})
-    spx_5d        = mega_data.get("spx_5d", 0)
-    avg_mega      = sum(mega_changes.values()) / len(mega_changes) if mega_changes else 0
-    concentration_gap = avg_mega - spx_5d
-
-    if concentration_gap > 2:   conc_level, conc_color = "HIGH",   "#ff4d4d"
-    elif concentration_gap > 0: conc_level, conc_color = "MEDIUM", "#FFDC00"
-    else:                       conc_level, conc_color = "LOW",    "#00ff88"
-
-    ai_headlines, ai_sentiment_scores = [], []
-    if news_df is not None and "headline" in news_df.columns:
-        ai_kw = ["ai", "artificial intelligence", "nvidia", "chip", "semiconductor", "openai", "llm", "gpu"]
-        for _, row in news_df.iterrows():
-            if any(k in str(row.get("headline","")).lower() for k in ai_kw):
-                ai_headlines.append(str(row.get("headline","")))
-                try: ai_sentiment_scores.append(float(row.get("sentiment", 0)))
-                except: pass
-
-    ai_sentiment_avg = sum(ai_sentiment_scores) / len(ai_sentiment_scores) if ai_sentiment_scores else 0
-    ai_count = len(ai_headlines)
-    if ai_count >= 3 and ai_sentiment_avg > 0.3:  ai_level, ai_color = "HIGH — Euphoric", "#ff4d4d"
-    elif ai_count >= 2 or ai_sentiment_avg > 0.1: ai_level, ai_color = "MEDIUM — Active", "#FFDC00"
-    else:                                          ai_level, ai_color = "LOW — Cooling",  "#00ff88"
-
-    ipo_headlines, ipo_kw = [], ["ipo", "listing", "public offering", "spac", "debut", "fundraise", "raise capital", "issuance"]
-    if news_df is not None and "headline" in news_df.columns:
-        for _, row in news_df.iterrows():
-            if any(k in str(row.get("headline","")).lower() for k in ipo_kw):
-                ipo_headlines.append(str(row.get("headline","")))
-    ipo_count = len(ipo_headlines)
-    if ipo_count >= 3:   ipo_level, ipo_color = "HIGH",   "#ff4d4d"
-    elif ipo_count >= 1: ipo_level, ipo_color = "MEDIUM", "#FFDC00"
-    else:                ipo_level, ipo_color = "LOW",     "#00ff88"
-
-    # ── RISK 1: S&P Concentration ───────────────────────────────
-    st.markdown("#### 🏦 Risk 1 — S&P 500 Concentration Risk")
-    r1c1, r1c2, r1c3 = st.columns(3)
-    with r1c1:
-        st.markdown(f"<div class='card'><div class='label'>Concentration Risk</div><div class='big-number' style='color:{conc_color};'>{conc_level}</div></div>", unsafe_allow_html=True)
-    with r1c2:
-        c = "#00ff88" if avg_mega > 0 else "#ff4d4d"
-        st.markdown(f"<div class='card'><div class='label'>Mega-Cap Avg (5d)</div><div class='big-number' style='color:{c};'>{avg_mega:+.2f}%</div></div>", unsafe_allow_html=True)
-    with r1c3:
-        c = "#00ff88" if spx_5d > 0 else "#ff4d4d"
-        st.markdown(f"<div class='card'><div class='label'>S&P 500 (5d)</div><div class='big-number' style='color:{c};'>{spx_5d:+.2f}%</div></div>", unsafe_allow_html=True)
-
-    st.caption(f"The top 7 mega-caps are **{'outperforming' if concentration_gap > 0 else 'underperforming'}** the S&P 500 by {abs(concentration_gap):.1f}% over 5 days. When a small group of stocks drive most of the index return, the market is fragile — one bad earnings report from any of them can drag the whole index down even if most stocks are fine.")
-
-    if mega_changes:
-        sorted_mega = sorted(mega_changes.items(), key=lambda x: x[1], reverse=True)
-        fig_conc = go.Figure()
-        fig_conc.add_trace(go.Bar(
-            x=[x[0] for x in sorted_mega], y=[x[1] for x in sorted_mega],
-            marker_color=["#00ff88" if v[1] >= spx_5d else "#ff4d4d" for v in sorted_mega],
-            text=[f"{v[1]:+.1f}%" for v in sorted_mega], textposition="outside"
-        ))
-        fig_conc.add_hline(y=spx_5d, line_dash="dash", line_color="#FFDC00",
-            annotation_text=f"S&P 500: {spx_5d:+.1f}%", annotation_position="right")
-        fig_conc.update_layout(
-            template="plotly_dark", height=300,
-            title="Mega-Cap 5-Day Returns vs S&P 500",
-            yaxis_title="5-Day Return %",
-            margin=dict(l=40, r=80, t=40, b=40),
-            yaxis=dict(gridcolor="#333"), xaxis=dict(showgrid=False), showlegend=False
-        )
-        st.plotly_chart(fig_conc, use_container_width=True)
-        st.caption("Yellow dashed line = S&P 500 return. Green bars = outperforming (pulling the index up). Red bars = underperforming. If most bars are green but the index is flat, smaller stocks are silently falling.")
+    # FX Pairs
+    st.markdown("#### FX Risk Pairs")
+    fx_cols = st.columns(3)
+    for i, pair in enumerate(["USDJPY", "GBPUSD", "EURUSD"]):
+        item   = (prices.get(pair, {}) or {})
+        price  = item.get("price")
+        change = item.get("change") or 0
+        color  = "#00ff88" if change > 0 else "#ff4d4d" if change < 0 else "#fff"
+        chstr  = f"▲ {change}%" if change > 0 else f"▼ {abs(change)}%" if change < 0 else "0.00%"
+        with fx_cols[i]:
+            st.markdown("<div class='card'>", unsafe_allow_html=True)
+            st.markdown(f"<div class='label'>{pair}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='big-number'>{price if price else 'N/A'}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='color:{color}; font-weight:bold;'>{chstr}</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+    st.caption("USD/JPY rising = risk-on (investors selling safe-haven Yen). GBP/USD and EUR/USD rising = dollar weakening, positive for global risk. Large FX moves signal big institutional flows that flow traders need to be aware of.")
     st.markdown("---")
 
-    # ── RISK 2: AI Bubble Monitor ───────────────────────────────
-    st.markdown("#### 🤖 Risk 2 — AI Bubble Monitor")
-    r2c1, r2c2, r2c3 = st.columns(3)
-    with r2c1:
-        st.markdown(f"<div class='card'><div class='label'>AI Hype Level</div><div class='big-number' style='color:{ai_color};'>{ai_level}</div></div>", unsafe_allow_html=True)
-    with r2c2:
-        st.markdown(f"<div class='card'><div class='label'>AI Headlines Today</div><div class='big-number'>{ai_count}</div></div>", unsafe_allow_html=True)
-    with r2c3:
-        sc3 = "#00ff88" if ai_sentiment_avg > 0.1 else "#ff4d4d" if ai_sentiment_avg < -0.1 else "#FFDC00"
-        st.markdown(f"<div class='card'><div class='label'>AI Sentiment Score</div><div class='big-number' style='color:{sc3};'>{ai_sentiment_avg:+.2f}</div></div>", unsafe_allow_html=True)
-
-    st.caption("AI stocks like NVIDIA have seen enormous gains driven partly by enthusiasm rather than earnings alone. High frequency + very positive sentiment signals potential euphoria — historically a precursor to sharp corrections. A bubble doesn't mean prices fall today, but the risk of sudden reversal is elevated.")
-
-    if ai_headlines:
-        st.markdown("**AI-related headlines today:**")
-        for h in ai_headlines[:5]:
-            st.markdown(f"- {h}")
-        if len(ai_sentiment_scores) > 1:
-            fig_ai = go.Figure(go.Bar(
-                x=[f"#{i+1}" for i in range(len(ai_sentiment_scores))],
-                y=ai_sentiment_scores,
-                marker_color=["#00ff88" if s > 0 else "#ff4d4d" for s in ai_sentiment_scores],
-                text=[f"{s:+.2f}" for s in ai_sentiment_scores], textposition="outside"
-            ))
-            fig_ai.update_layout(
-                template="plotly_dark", height=240,
-                title="AI Headline Sentiment Scores",
-                yaxis=dict(range=[-1, 1], gridcolor="#333"),
-                xaxis=dict(showgrid=False), margin=dict(l=40,r=40,t=40,b=40)
-            )
-            st.plotly_chart(fig_ai, use_container_width=True)
-            st.caption("Each bar = one AI headline. Green = positive, Red = negative. Consistently high green bars signal euphoria. Mixed or turning red = narrative shifting, a potential early warning.")
+    # News Risk Themes
+    st.markdown("#### News-Driven Risk Themes")
+    if news_df is not None and len(news_df) > 0:
+        news_list   = news_df.to_dict(orient="records")
+        risk_themes = extract_news_themes(news_list)
+        theme_labels = {
+            "oil_supply":     "⛽ Oil Supply Risk",
+            "oil_geopolitics":"🌍 Geopolitical Risk",
+            "oil_demand":     "📉 Demand Concern",
+            "energy_prices":  "⚡ Energy Price Pressure",
+            "china_growth":   "🇨🇳 China Growth Risk",
+            "manufacturing":  "🏭 Manufacturing Weakness",
+            "inflation":      "📈 Inflation / Rate Risk",
+            "weather":        "🌦 Weather / Crop Risk",
+            "grain_supply":   "🌾 Grain Supply Risk",
+        }
+        active = [label for key, label in theme_labels.items() if risk_themes.get(key)]
+        if active:
+            tcols = st.columns(3)
+            for i, label in enumerate(active):
+                with tcols[i % 3]:
+                    st.markdown(f"<div class='card' style='color:#FFDC00;'>{label}</div>", unsafe_allow_html=True)
+        else:
+            st.info("No elevated risk themes in current headlines.")
     else:
-        st.info("No AI-related headlines today. Could mean hype is cooling or the news cycle has moved on — both worth noting.")
+        st.info("No news data available yet.")
+    st.caption("These themes are extracted from today's headlines. Each active theme is a macro risk that could drive client flow — e.g. geopolitical risk pushes clients into gold and out of equities.")
     st.markdown("---")
 
-    # ── RISK 3: IPO / Capital Flow Risk ─────────────────────────
-    st.markdown("#### 📋 Risk 3 — IPO & Capital Flow Risk")
-    r3c1, r3c2, r3c3 = st.columns(3)
-    with r3c1:
-        st.markdown(f"<div class='card'><div class='label'>IPO Activity</div><div class='big-number' style='color:{ipo_color};'>{ipo_level}</div></div>", unsafe_allow_html=True)
-    with r3c2:
-        st.markdown(f"<div class='card'><div class='label'>IPO Headlines Today</div><div class='big-number'>{ipo_count}</div></div>", unsafe_allow_html=True)
-    with r3c3:
-        sc4 = "#00ff88" if spx_change > 0 else "#ff4d4d"
-        st.markdown(f"<div class='card'><div class='label'>S&P 500 Today</div><div class='big-number' style='color:{sc4};'>{spx_change:+.2f}%</div></div>", unsafe_allow_html=True)
+    # ── SECTION 2: FLOW TRADING RISK ───────────────────────────
+    st.markdown("### 🏦 Section 2 — Flow Trading Risk")
+    st.caption("This mirrors what a junior flow trader at a bank sees. When a client trades, you take the other side and manage the resulting risk. Your inventory shows what you're holding, and the bar chart shows your market exposure.")
 
-    st.caption("When many companies list at once, they pull money out of existing stocks as investors sell holdings to fund new purchases. High IPO activity alongside a falling market is a classic warning — it drains liquidity from existing positions.")
-
-    if ipo_headlines:
-        st.markdown("**IPO/issuance headlines today:**")
-        for h in ipo_headlines[:5]:
-            st.markdown(f"- {h}")
-        fig_ipo = go.Figure(go.Bar(
-            x=["IPO Headlines", "S&P 500 Today", "Copper Today"],
-            y=[ipo_count, spx_change, copper_change],
-            marker_color=["#FFDC00", "#00ff88" if spx_change > 0 else "#ff4d4d", "#00ff88" if copper_change > 0 else "#ff4d4d"],
-            text=[str(ipo_count), f"{spx_change:+.2f}%", f"{copper_change:+.2f}%"],
-            textposition="outside"
-        ))
-        fig_ipo.update_layout(
-            template="plotly_dark", height=260,
-            title="IPO Activity vs Market Indicators",
-            margin=dict(l=40,r=40,t=40,b=40),
-            yaxis=dict(gridcolor="#333"), xaxis=dict(showgrid=False)
-        )
-        st.plotly_chart(fig_ipo, use_container_width=True)
-        st.caption("Yellow = IPO headline count. High IPO activity + red market bars = capital being drained from existing stocks into new listings.")
-    else:
-        st.info("No IPO or issuance headlines today. Low issuance is supportive for existing stocks — less competition for investor capital.")
-    st.markdown("---")
-
-    # ── GPT RISK NARRATIVE ──────────────────────────────────────
-    st.markdown("#### 🤖 AI Risk Narrative")
-    st.caption("Uses live market data and the three risk monitors above to generate a single trader-ready risk summary. Updated on demand.")
-
-    if st.button("🔄 Generate Risk Narrative", key="risk_narrative_btn"):
-        with st.spinner("Analysing risk themes..."):
-            try:
-                from gpt_layer import call_gpt_prose
-                risk_prompt = f"""You are a senior risk manager at a major investment bank writing a morning risk briefing.
-
-LIVE MARKET DATA:
-- Risk Regime: {risk_label} (score: {risk_score:+.2f})
-- VIX: {vix_price:.1f} ({vol_regime})
-- S&P 500: {spx_change:+.2f}% today, {spx_5d:+.2f}% over 5 days
-- Copper: {copper_change:+.2f}% (global growth proxy)
-- Gold: {gold_change:+.2f}% (safe haven)
-- News Sentiment: {avg_sentiment:+.2f}
-
-CONCENTRATION RISK: Mega-caps averaged {avg_mega:+.2f}% vs S&P {spx_5d:+.2f}% (5d). Gap: {concentration_gap:+.2f}% — rated {conc_level}.
-
-AI BUBBLE: {ai_count} AI headlines today. Sentiment: {ai_sentiment_avg:+.2f}. Level: {ai_level}.
-Top AI headlines: {"; ".join(ai_headlines[:2]) if ai_headlines else "None"}
-
-IPO RISK: {ipo_count} IPO/issuance headlines — rated {ipo_level}.
-Top IPO headlines: {"; ".join(ipo_headlines[:2]) if ipo_headlines else "None"}
-
-Write a concise 3-4 sentence risk narrative that:
-1. States the overall risk regime and what it means for flow traders today
-2. Highlights the most important structural risk and why it matters right now
-3. Gives one actionable observation for a flow trader
-
-Direct, professional, Bloomberg-style. Plain prose only. No bullet points. No headings."""
-
-                narrative = call_gpt_prose(risk_prompt)
-                st.session_state["risk_narrative"] = narrative if narrative else "Could not generate narrative — check OpenAI key in Streamlit secrets."
-            except Exception as e:
-                st.session_state["risk_narrative"] = f"Error generating narrative: {e}"
-
-    narrative = st.session_state.get("risk_narrative", "Click 'Generate Risk Narrative' above to get an AI-powered summary of today's key risks.")
-    st.markdown(f"<div class='card' style='line-height:1.7; color:#DDDDDD;'>{narrative}</div>", unsafe_allow_html=True)
-    st.markdown("---")
-
-    # ── FLOW TRADING RISK ────────────────────────────────────────
-    st.markdown("### 🏦 Section 3 — Your Flow Trading Risk")
-    st.caption("Live view of your simulated trading book. Go to the Flow Trading tab to add client trades.")
-
+    st.markdown("#### Current Inventory Exposure")
     inv = st.session_state.get("inventory", {})
-    pnl = st.session_state.get("pnl", {"spread_pnl": 0, "hedge_pnl": 0, "inventory_pnl": 0})
-    total_pnl = sum(pnl.values())
-
-    p1, p2, p3, p4 = st.columns(4)
-    for col, label, key, tip in [
-        (p1, "Spread P&L",    "spread_pnl",    "Earned from bid/offer"),
-        (p2, "Hedge P&L",     "hedge_pnl",     "From hedges placed"),
-        (p3, "Inventory P&L", "inventory_pnl", "Mark-to-market"),
-        (p4, "Total P&L",     None,            "Overall book P&L"),
-    ]:
-        val = total_pnl if key is None else pnl.get(key, 0)
-        cc  = "#00ff88" if val >= 0 else "#ff4d4d"
-        with col:
-            st.markdown(f"<div class='card'><div class='label'>{label}</div><div class='big-number' style='color:{cc};'>${val:,.0f}</div><div class='label' style='font-size:10px;'>{tip}</div></div>", unsafe_allow_html=True)
 
     if inv and any(v != 0 for v in inv.values()):
         assets  = list(inv.keys())
         values  = [inv[a] for a in assets]
+        colours = ["#00ff88" if v > 0 else "#ff4d4d" for v in values]
         fig_inv = go.Figure(go.Bar(
-            x=assets, y=values,
-            marker_color=["#00ff88" if v > 0 else "#ff4d4d" for v in values],
+            x=assets, y=values, marker_color=colours,
             text=[f"${abs(v):,.0f}" for v in values], textposition="outside"
         ))
         fig_inv.update_layout(
-            template="plotly_dark", height=280, title="Net Inventory (USD)",
+            template="plotly_dark", height=320,
+            title="Net Inventory (USD)", yaxis_title="Net Position (USD)",
             margin=dict(l=40,r=40,t=40,b=40),
             yaxis=dict(gridcolor="#333"), xaxis=dict(showgrid=False)
         )
         st.plotly_chart(fig_inv, use_container_width=True)
-        needs_hedge = {a: v for a, v in inv.items() if abs(v) >= 500_000}
-        if needs_hedge:
-            for asset, notional in needs_hedge.items():
-                st.warning(f"⚠️ **{asset}** — {'LONG' if notional > 0 else 'SHORT'} ${abs(notional):,.0f}. Hedge signal active.")
-        else:
-            st.success("✅ All positions within risk limits.")
+        st.caption("Green = long (you profit if price rises). Red = short (you profit if price falls). Good flow traders keep bars close to zero — large bars mean significant market risk if prices move against you.")
     else:
-        st.info("No open positions. Head to the Flow Trading tab to simulate client trades.")
+        st.info("No open inventory positions. Go to the Flow Trading tab to simulate some client trades — they will appear here.")
+        st.caption("When you accept a client trade in the Flow Trading tab, your inventory updates here in real time. A flow trader's goal is to keep inventory balanced while collecting the bid/offer spread.")
+
+    st.markdown("")
+
+    # P&L Summary
+    st.markdown("#### P&L Summary")
+    pnl       = st.session_state.get("pnl", {"spread_pnl": 0, "hedge_pnl": 0, "inventory_pnl": 0})
+    total_pnl = sum(pnl.values())
+    p1, p2, p3, p4 = st.columns(4)
+    for col, label, key, tip in [
+        (p1, "Spread P&L",    "spread_pnl",    "Earned from bid/offer on every client trade"),
+        (p2, "Hedge P&L",     "hedge_pnl",     "P&L from hedges placed to offset inventory risk"),
+        (p3, "Inventory P&L", "inventory_pnl", "Mark-to-market gain/loss on open positions"),
+        (p4, "Total P&L",     None,            "Your overall trading P&L"),
+    ]:
+        val = total_pnl if key is None else pnl.get(key, 0)
+        cc  = "#00ff88" if val >= 0 else "#ff4d4d"
+        with col:
+            st.markdown("<div class='card'>", unsafe_allow_html=True)
+            st.markdown(f"<div class='label'>{label}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='big-number' style='color:{cc};'>${val:,.0f}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='label' style='font-size:10px;'>{tip}</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+    st.caption("**Spread P&L** is guaranteed income you earn on every trade. **Inventory P&L** moves with the market and is risky. Great flow traders maximise spread income while keeping inventory P&L close to zero through hedging.")
+
+    st.markdown("")
+
+    # Hedge signals
+    st.markdown("#### Hedge Signals")
+    needs_hedge = {a: v for a, v in inv.items() if abs(v) >= 500_000}
+    if needs_hedge:
+        for asset, notional in needs_hedge.items():
+            direction = "LONG" if notional > 0 else "SHORT"
+            st.warning(f"⚠️ **{asset}** — You are {direction} ${abs(notional):,.0f}. Consider hedging in the Flow Trading tab.")
+        st.caption("A hedge signal fires when a position exceeds $500,000. A 1% adverse move = $5,000 loss. Go to Flow Trading → Compute Hedge to reduce this exposure.")
+    else:
+        st.success("✅ No hedge signals — all positions within risk limits.")
+        st.caption("Hedge signals appear when any single position exceeds $500,000 notional. Currently all positions are within acceptable limits.")
 
 
 with tabs[2]:
@@ -1170,3 +1104,56 @@ with tabs[3]:
 
 with tabs[4]:
     render_flow_trading_tab()
+
+    # ── RISK OVERVIEW (from Risk tab) ───────────────────────────
+    st.markdown("---")
+    st.markdown("### 📊 Book Risk Overview")
+    st.caption("A summary of your current simulated trading book risk. Large positions relative to your daily volume are a warning sign — they expose you to significant mark-to-market losses if the market moves against you.")
+
+    inv_risk = st.session_state.get("inventory", {})
+    pnl_risk = st.session_state.get("pnl", {"spread_pnl": 0, "hedge_pnl": 0, "inventory_pnl": 0})
+    total_pnl_risk = sum(pnl_risk.values())
+
+    rp1, rp2, rp3, rp4 = st.columns(4)
+    for col, label, key, tip in [
+        (rp1, "Spread P&L",    "spread_pnl",    "Earned from bid/offer on every trade"),
+        (rp2, "Hedge P&L",     "hedge_pnl",     "P&L from hedges placed"),
+        (rp3, "Inventory P&L", "inventory_pnl", "Mark-to-market on open positions"),
+        (rp4, "Total P&L",     None,            "Your overall book P&L"),
+    ]:
+        val = total_pnl_risk if key is None else pnl_risk.get(key, 0)
+        cc  = "#00ff88" if val >= 0 else "#ff4d4d"
+        with col:
+            st.markdown(f"<div class='card'><div class='label'>{label}</div><div class='big-number' style='color:{cc};'>${val:,.0f}</div><div class='label' style='font-size:10px;'>{tip}</div></div>", unsafe_allow_html=True)
+
+    st.caption("**Spread P&L** is your guaranteed income — earned every time a client trades. **Inventory P&L** moves with the market and is the risky part. Great flow traders maximise spread income while keeping inventory P&L close to zero.")
+    st.markdown("")
+
+    if inv_risk and any(v != 0 for v in inv_risk.values()):
+        assets_r  = list(inv_risk.keys())
+        values_r  = [inv_risk[a] for a in assets_r]
+        fig_inv_r = go.Figure(go.Bar(
+            x=assets_r, y=values_r,
+            marker_color=["#00ff88" if v > 0 else "#ff4d4d" for v in values_r],
+            text=[f"${abs(v):,.0f}" for v in values_r], textposition="outside"
+        ))
+        fig_inv_r.update_layout(
+            template="plotly_dark", height=300,
+            title="Net Inventory Exposure (USD)",
+            yaxis_title="Net Position (USD)",
+            margin=dict(l=40,r=40,t=50,b=40),
+            yaxis=dict(gridcolor="#333"), xaxis=dict(showgrid=False)
+        )
+        st.plotly_chart(fig_inv_r, use_container_width=True)
+        st.caption("Green = long (you profit if price rises). Red = short (you profit if price falls). Keep bars close to zero — large bars mean big market risk.")
+
+        needs_hedge_r = {a: v for a, v in inv_risk.items() if abs(v) >= 500_000}
+        if needs_hedge_r:
+            st.markdown("#### ⚠️ Active Hedge Signals")
+            for asset, notional in needs_hedge_r.items():
+                direction = "LONG" if notional > 0 else "SHORT"
+                st.warning(f"**{asset}** — You are {direction} ${abs(notional):,.0f}. A 1% adverse move = ${abs(notional)*0.01:,.0f} loss. Use Compute Hedge below to reduce this.")
+        else:
+            st.success("✅ All positions within risk limits (under $500,000 per asset).")
+    else:
+        st.info("No open inventory. Add some client trades above to see your risk exposure here.")
