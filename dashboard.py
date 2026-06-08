@@ -706,7 +706,7 @@ To reduce inventory risk, you hedge — placing an offsetting trade in the marke
 
 
 # ---------- TABS INITIALIZATION ----------
-tabs = st.tabs(["Macro", "Risk", "Commodities", "S&P500", "Flow Trading"])
+tabs = st.tabs(["Macro", "Risk", "Commodities", "S&P500", "Flow Trading", "Trade Ideas"])
 
 # ---------- LOAD MARKET DATA ----------
 prices = get_market_data()
@@ -2228,5 +2228,369 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
 
     if st.session_state.get(tab_chat_key):
         if st.button("🗑️ Clear chat", key=f"clear_chat_Flow Trading"):
+            st.session_state[tab_chat_key] = []
+            st.rerun()
+
+# ══════════════════════════════════════════════════════════════
+# TAB 5 — TRADE IDEAS
+# ══════════════════════════════════════════════════════════════
+with tabs[5]:
+    import json as _json
+    from datetime import datetime as _dt2
+
+    st.markdown("## 💡 Trade Ideas")
+    st.caption("Structure and track your own market calls. Every idea needs an entry, target, stop and rationale — just like a real S&T desk. This builds the habit of thinking in structured trade terms, which is exactly what interviewers test.")
+
+    # ── Initialise trade ideas state ────────────────────────────
+    if "trade_ideas" not in st.session_state:
+        st.session_state["trade_ideas"] = []
+
+    # ── ASSET UNIVERSE ───────────────────────────────────────────
+    TRADE_ASSETS = {
+        "S&P 500":       "^GSPC",   "NASDAQ":        "^IXIC",
+        "FTSE 100":      "^FTSE",   "EUR/USD":       "EURUSD=X",
+        "GBP/USD":       "GBPUSD=X","USD/JPY":       "JPY=X",
+        "Brent Crude":   "BZ=F",    "Gold":          "GC=F",
+        "Silver":        "SI=F",    "Copper":        "HG=F",
+        "Natural Gas":   "NG=F",    "US 10Y (IEF)":  "IEF",
+        "US 30Y (TLT)":  "TLT",     "VIX":           "^VIX",
+        "NVIDIA (NVDA)": "NVDA",    "Apple (AAPL)":  "AAPL",
+        "Microsoft":     "MSFT",    "Amazon":        "AMZN",
+    }
+
+    @st.cache_data(ttl=300)
+    def _get_live_price(ticker):
+        try:
+            import yfinance as yf
+            hist = yf.Ticker(ticker).history(period="2d")
+            if hist is not None and len(hist) > 0:
+                return round(float(hist["Close"].iloc[-1]), 4)
+        except Exception:
+            pass
+        return None
+
+    def _update_idea_status(idea):
+        """Check if idea has hit target or stop."""
+        if idea["status"] != "Open":
+            return idea
+        ticker = TRADE_ASSETS.get(idea["asset"])
+        if not ticker:
+            return idea
+        price = _get_live_price(ticker)
+        if price is None:
+            return idea
+        idea["current_price"] = price
+        entry = idea["entry_price"]
+        target = idea["target"]
+        stop   = idea["stop"]
+        direction = 1 if idea["direction"] == "BUY" else -1
+        pnl_pct = ((price - entry) / entry) * 100 * direction
+        idea["pnl_pct"] = round(pnl_pct, 2)
+        # Check hit levels
+        if direction == 1:
+            if price >= target:
+                idea["status"] = "✅ Won"
+            elif price <= stop:
+                idea["status"] = "❌ Lost"
+        else:
+            if price <= target:
+                idea["status"] = "✅ Won"
+            elif price >= stop:
+                idea["status"] = "❌ Lost"
+        return idea
+
+    # Update all open ideas
+    st.session_state["trade_ideas"] = [
+        _update_idea_status(i) for i in st.session_state["trade_ideas"]
+    ]
+
+    # ── SCORECARD ────────────────────────────────────────────────
+    ideas = st.session_state["trade_ideas"]
+    if ideas:
+        won   = [i for i in ideas if i["status"] == "✅ Won"]
+        lost  = [i for i in ideas if i["status"] == "❌ Lost"]
+        open_ = [i for i in ideas if i["status"] == "Open"]
+        hit_rate = round(len(won) / (len(won) + len(lost)) * 100) if (won or lost) else 0
+        avg_rr   = round(sum(i.get("risk_reward",0) for i in ideas) / len(ideas), 2)
+        total_pnl_ideas = sum(i.get("pnl_pct", 0) for i in ideas if i["status"] != "Open")
+
+        sc1, sc2, sc3, sc4, sc5 = st.columns(5)
+        with sc1:
+            st.markdown(f"<div class='card'><div class='label'>Open Ideas</div><div class='big-number' style='color:#FFDC00;'>{len(open_)}</div></div>", unsafe_allow_html=True)
+        with sc2:
+            st.markdown(f"<div class='card'><div class='label'>Won</div><div class='big-number' style='color:#00ff88;'>{len(won)}</div></div>", unsafe_allow_html=True)
+        with sc3:
+            st.markdown(f"<div class='card'><div class='label'>Lost</div><div class='big-number' style='color:#ff4d4d;'>{len(lost)}</div></div>", unsafe_allow_html=True)
+        with sc4:
+            hr_color = "#00ff88" if hit_rate >= 50 else "#ff4d4d"
+            st.markdown(f"<div class='card'><div class='label'>Hit Rate</div><div class='big-number' style='color:{hr_color};'>{hit_rate}%</div></div>", unsafe_allow_html=True)
+        with sc5:
+            rr_color = "#00ff88" if avg_rr >= 2 else "#FFDC00"
+            st.markdown(f"<div class='card'><div class='label'>Avg Risk/Reward</div><div class='big-number' style='color:{rr_color};'>{avg_rr}:1</div></div>", unsafe_allow_html=True)
+        st.markdown("")
+
+    st.markdown("---")
+
+    # ── NEW TRADE IDEA FORM ──────────────────────────────────────
+    st.markdown("### ➕ New Trade Idea")
+
+    with st.form("new_trade_idea", clear_on_submit=True):
+        fc1, fc2, fc3 = st.columns(3)
+        with fc1:
+            asset = st.selectbox("Asset", list(TRADE_ASSETS.keys()))
+        with fc2:
+            direction = st.radio("Direction", ["BUY", "SELL"], horizontal=True)
+        with fc3:
+            horizon = st.selectbox("Time Horizon", ["Intraday", "1-3 Days", "1-2 Weeks", "1 Month", "3+ Months"])
+
+        # Get live price for reference
+        live_ref = _get_live_price(TRADE_ASSETS.get(asset, ""))
+        if live_ref:
+            st.caption(f"📌 Current live price: **{live_ref}**")
+
+        fp1, fp2, fp3 = st.columns(3)
+        with fp1:
+            entry  = st.number_input("Entry Price", value=float(live_ref) if live_ref else 100.0, format="%.4f")
+        with fp2:
+            target = st.number_input("Target Price", value=float(live_ref * 1.03) if live_ref else 103.0, format="%.4f")
+        with fp3:
+            stop   = st.number_input("Stop Price",   value=float(live_ref * 0.98) if live_ref else 98.0,  format="%.4f")
+
+        rationale = st.text_area(
+            "Trade Rationale",
+            placeholder="e.g. Fed pivot expected — real yields falling, gold breaking out above $2000 resistance with strong momentum. Risk: stronger than expected NFP could push yields higher.",
+            height=100
+        )
+
+        catalysts = st.text_input(
+            "Key Catalysts / Events to Watch",
+            placeholder="e.g. Fed meeting Jun 12, CPI Jun 15, OPEC+ meeting"
+        )
+
+        tag = st.selectbox("Theme Tag", ["Macro", "Technical", "Rates", "FX", "Equity", "Commodity", "Risk-On", "Risk-Off", "Event-Driven"])
+
+        submitted = st.form_submit_button("📌 Add Trade Idea", type="primary")
+
+        if submitted:
+            if not rationale.strip():
+                st.error("Please add a rationale — this is the most important part of any trade idea.")
+            else:
+                # Compute risk/reward
+                if direction == "BUY":
+                    reward = abs(target - entry)
+                    risk   = abs(entry - stop)
+                else:
+                    reward = abs(entry - target)
+                    risk   = abs(stop - entry)
+                rr = round(reward / risk, 2) if risk > 0 else 0
+
+                new_idea = {
+                    "id":            len(ideas) + 1,
+                    "date":          _dt2.now().strftime("%Y-%m-%d %H:%M"),
+                    "asset":         asset,
+                    "direction":     direction,
+                    "horizon":       horizon,
+                    "entry_price":   entry,
+                    "target":        target,
+                    "stop":          stop,
+                    "current_price": live_ref or entry,
+                    "rationale":     rationale,
+                    "catalysts":     catalysts,
+                    "tag":           tag,
+                    "risk_reward":   rr,
+                    "status":        "Open",
+                    "pnl_pct":       0.0,
+                }
+                st.session_state["trade_ideas"].append(new_idea)
+                st.success(f"✅ Trade idea added! Risk/Reward: {rr}:1 {'⚠️ Below 2:1 — consider adjusting target or stop' if rr < 2 else '👍 Good R/R'}")
+                st.rerun()
+
+    st.markdown("---")
+
+    # ── OPEN IDEAS ───────────────────────────────────────────────
+    open_ideas = [i for i in ideas if i["status"] == "Open"]
+    if open_ideas:
+        st.markdown("### 📊 Open Positions")
+
+        for idea in open_ideas:
+            dir_color = "#00ff88" if idea["direction"] == "BUY" else "#ff4d4d"
+            pnl       = idea.get("pnl_pct", 0)
+            pnl_color = "#00ff88" if pnl > 0 else "#ff4d4d" if pnl < 0 else "#fff"
+            cur_price = idea.get("current_price", idea["entry_price"])
+
+            # Progress to target
+            entry, target, stop = idea["entry_price"], idea["target"], idea["stop"]
+            direction_mult = 1 if idea["direction"] == "BUY" else -1
+            total_move = abs(target - entry)
+            current_move = (cur_price - entry) * direction_mult
+            progress = max(0, min(1, current_move / total_move)) if total_move > 0 else 0
+
+            with st.container():
+                st.markdown(
+                    f"<div class='card' style='border-left:4px solid {dir_color}; margin-bottom:12px;'>"
+                    f"<div style='display:flex; justify-content:space-between; align-items:center;'>"
+                    f"<div>"
+                    f"<span style='color:{dir_color}; font-weight:bold; font-size:16px;'>{idea['direction']} {idea['asset']}</span>"
+                    f"<span style='color:#888; font-size:12px; margin-left:10px;'>{idea['tag']} | {idea['horizon']} | Added {idea['date']}</span>"
+                    f"</div>"
+                    f"<div style='text-align:right;'>"
+                    f"<span style='color:{pnl_color}; font-size:18px; font-weight:bold;'>{pnl:+.2f}%</span>"
+                    f"</div>"
+                    f"</div>"
+                    f"<div style='margin-top:8px; font-size:13px; color:#888;'>"
+                    f"Entry: <strong style='color:#fff;'>{entry}</strong> &nbsp;|&nbsp; "
+                    f"Current: <strong style='color:{pnl_color};'>{cur_price}</strong> &nbsp;|&nbsp; "
+                    f"Target: <strong style='color:#00ff88;'>{target}</strong> &nbsp;|&nbsp; "
+                    f"Stop: <strong style='color:#ff4d4d;'>{stop}</strong> &nbsp;|&nbsp; "
+                    f"R/R: <strong>{idea['risk_reward']}:1</strong>"
+                    f"</div>"
+                    f"<div style='margin-top:6px; font-size:12px; color:#AAAAAA;'>{idea['rationale'][:150]}{'...' if len(idea['rationale']) > 150 else ''}</div>"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
+                # Progress bar toward target
+                st.progress(progress, text=f"{progress*100:.0f}% of the way to target")
+
+                # Close button
+                if st.button(f"✕ Close idea #{idea['id']}", key=f"close_idea_{idea['id']}"):
+                    for i2 in st.session_state["trade_ideas"]:
+                        if i2["id"] == idea["id"]:
+                            i2["status"] = "🔒 Closed"
+                    st.rerun()
+
+        st.markdown("---")
+
+    # ── CLOSED IDEAS ─────────────────────────────────────────────
+    closed = [i for i in ideas if i["status"] != "Open"]
+    if closed:
+        st.markdown("### 📋 Trade History")
+        for idea in reversed(closed):
+            status_color = "#00ff88" if "Won" in idea["status"] else "#ff4d4d" if "Lost" in idea["status"] else "#888"
+            pnl          = idea.get("pnl_pct", 0)
+            pnl_color    = "#00ff88" if pnl > 0 else "#ff4d4d" if pnl < 0 else "#fff"
+            dir_color    = "#00ff88" if idea["direction"] == "BUY" else "#ff4d4d"
+            st.markdown(
+                f"<div class='card' style='margin-bottom:6px; opacity:0.85;'>"
+                f"<div style='display:flex; justify-content:space-between;'>"
+                f"<div>"
+                f"<span style='color:{status_color}; font-weight:bold;'>{idea['status']}</span>"
+                f"<span style='color:{dir_color}; margin-left:8px; font-weight:bold;'>{idea['direction']} {idea['asset']}</span>"
+                f"<span style='color:#888; font-size:12px; margin-left:8px;'>{idea['tag']} | {idea['date']}</span>"
+                f"</div>"
+                f"<div style='color:{pnl_color}; font-weight:bold;'>{pnl:+.2f}% | R/R: {idea['risk_reward']}:1</div>"
+                f"</div>"
+                f"<div style='font-size:12px; color:#888; margin-top:4px;'>Entry: {idea['entry_price']} → Target: {idea['target']} | Stop: {idea['stop']}</div>"
+                f"<div style='font-size:11px; color:#666; margin-top:2px;'>{idea['rationale'][:120]}{'...' if len(idea['rationale']) > 120 else ''}</div>"
+                f"</div>",
+                unsafe_allow_html=True
+            )
+        st.markdown("---")
+
+    if not ideas:
+        st.info("No trade ideas yet. Use the form above to add your first structured trade idea.")
+        st.markdown("""
+**How to write a good trade idea:**
+- **Be specific** — "Long Brent Crude at $82" not "oil looks good"
+- **Define your levels** — entry, target, and stop before you put it on
+- **State your catalyst** — what event or data will prove you right?
+- **Know your risk/reward** — aim for at least 2:1 (risk $1 to make $2)
+- **Set a time horizon** — when will you know if you're wrong?
+        """)
+
+    # ── AI TRADE IDEA REVIEW ──────────────────────────────────────
+    st.markdown("---")
+    st.markdown("### 🤖 AI Trade Idea Coach")
+    st.caption("Get GPT feedback on your trade ideas — quality of rationale, risk/reward assessment, and what a senior trader might challenge you on.")
+
+    if ideas:
+        idea_to_review = st.selectbox(
+            "Select idea to review",
+            [f"#{i['id']} {i['direction']} {i['asset']} ({i['status']})" for i in ideas],
+            key="idea_review_select"
+        )
+        selected_id = int(idea_to_review.split("#")[1].split(" ")[0])
+        selected_idea = next((i for i in ideas if i["id"] == selected_id), None)
+
+        if st.button("🔍 Review This Trade Idea", key="review_idea_btn"):
+            if selected_idea:
+                with st.spinner("Reviewing your trade idea..."):
+                    try:
+                        from gpt_layer import call_gpt_prose
+                        review_prompt = f"""You are a senior S&T trader reviewing a junior analyst's trade idea. Be direct and constructive.
+
+TRADE IDEA:
+- Asset: {selected_idea['asset']}
+- Direction: {selected_idea['direction']}
+- Entry: {selected_idea['entry_price']}
+- Target: {selected_idea['target']}
+- Stop: {selected_idea['stop']}
+- Risk/Reward: {selected_idea['risk_reward']}:1
+- Time Horizon: {selected_idea['horizon']}
+- Theme: {selected_idea['tag']}
+- Status: {selected_idea['status']} | P&L: {selected_idea.get('pnl_pct', 0):+.2f}%
+
+RATIONALE:
+{selected_idea['rationale']}
+
+CATALYSTS:
+{selected_idea.get('catalysts', 'None specified')}
+
+Please provide:
+1. STRENGTHS (1-2 sentences): What is good about this trade idea?
+2. WEAKNESSES (1-2 sentences): What is missing or poorly thought through?
+3. RISK/REWARD ASSESSMENT: Is {selected_idea['risk_reward']}:1 appropriate for this trade?
+4. WHAT A SENIOR TRADER WOULD ASK: 2-3 challenging questions they'd fire at you in a morning meeting
+5. OVERALL RATING: Score /10 and one line on how to improve it
+
+Be honest and rigorous — this person is trying to break into S&T."""
+
+                        review = call_gpt_prose(review_prompt)
+                        st.session_state["idea_review"] = review or "Could not generate review."
+                    except Exception as e:
+                        st.session_state["idea_review"] = f"Error: {e}"
+
+        review_text = st.session_state.get("idea_review", "Select an idea above and click Review to get AI feedback.")
+        st.markdown(f"<div class='card' style='line-height:1.8; color:#DDDDDD; white-space:pre-wrap;'>{review_text}</div>", unsafe_allow_html=True)
+    else:
+        st.info("Add a trade idea above to get AI coaching feedback on it.")
+
+    # ── TAB CHAT ─────────────────────────────────────────────────
+    _tab_name = "Trade Ideas"
+    tab_chat_key = f"chat_history_{_tab_name}"
+    if tab_chat_key not in st.session_state:
+        st.session_state[tab_chat_key] = []
+
+    st.markdown("---")
+    st.markdown("### 💬 Ask the Trading Assistant")
+    st.caption("Ask anything about trade structuring, risk/reward, or how to pitch a trade idea in an interview.")
+
+    for msg in st.session_state[tab_chat_key]:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    if _question := st.chat_input("Ask about trade ideas, structuring, or interview prep...", key="chat_input_Trade Ideas"):
+        st.session_state[tab_chat_key].append({"role": "user", "content": _question})
+        with st.chat_message("user"):
+            st.markdown(_question)
+
+        open_summary = "; ".join([f"{i['direction']} {i['asset']} ({i.get('pnl_pct',0):+.1f}%)" for i in open_ideas[:3]]) if open_ideas else "None"
+        _system = f"""You are an expert S&T trading mentor helping someone break into investment banking sales and trading.
+OPEN IDEAS: {open_summary}
+Help with trade structuring, rationale writing, risk/reward thinking, and interview preparation.
+Be concise (2-4 sentences) and direct."""
+
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                try:
+                    from gpt_layer import call_gpt_prose
+                    _resp = call_gpt_prose(f"{_system}\n\nQuestion: {_question}")
+                    if _resp:
+                        st.markdown(_resp)
+                        st.session_state[tab_chat_key].append({"role": "assistant", "content": _resp})
+                except Exception as e:
+                    st.markdown(f"Error: {e}")
+
+    if st.session_state.get(tab_chat_key):
+        if st.button("🗑️ Clear chat", key="clear_chat_Trade Ideas"):
             st.session_state[tab_chat_key] = []
             st.rerun()
