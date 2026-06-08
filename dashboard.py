@@ -147,29 +147,143 @@ FLOW_ASSETS = {
     "Natural Gas (NG=F)":  {"ticker": "NG=F",     "spread_bps": 3.0,  "hedge_ticker": "UNG",      "category": "Commodities", "description": "Natural gas futures"},
 }
 
-HEDGE_THRESHOLD_USD   = 500_000
-MAX_INVENTORY_USD     = 2_000_000   # force-hedge above this
+HEDGE_THRESHOLD_USD = 500_000
 
-# ── DEFAULT RISK PARAMETERS (overridden by sidebar sliders) ──────────
-DEFAULT_RISK_PARAMS = {
-    "slippage_min_bps":    1.0,    # minimum slippage on hedge (bps)
-    "slippage_max_bps":    8.0,    # maximum slippage on hedge (bps)
-    "latency_min_ms":      100,    # min hedge delay (ms)
-    "latency_max_ms":      2000,   # max hedge delay (ms)
-    "volatility_factor":   1.0,    # multiplier on random price drift
-    "impact_factor":       0.5,    # market impact coefficient
-    "liquidity_usd":       10_000_000,  # assumed daily liquidity
-    "toxic_flow_prob":     0.20,   # probability a client is "informed"
-    "toxic_jump_bps":      15.0,   # adverse jump after toxic flow (bps)
-    "overnight_vol_bps":   50.0,   # overnight gap risk (bps 1-sigma)
-}
+# Client order scenarios — realistic flow patterns
+CLIENT_ORDER_SCENARIOS = [
+    {"asset": "S&P 500 (SPY)",      "side": "Buy",  "notional": 2_000_000, "reason": "Pension fund rebalancing into equities end of quarter"},
+    {"asset": "S&P 500 (SPY)",      "side": "Sell", "notional": 5_000_000, "reason": "Hedge fund reducing equity exposure on macro uncertainty"},
+    {"asset": "Gold (GC=F)",        "side": "Buy",  "notional": 1_000_000, "reason": "Safe-haven demand — geopolitical headline risk rising"},
+    {"asset": "Gold (GC=F)",        "side": "Sell", "notional": 750_000,   "reason": "Risk-on rotation — client selling gold to buy equities"},
+    {"asset": "EUR/USD",            "side": "Buy",  "notional": 3_000_000, "reason": "Corporate FX hedge — European exporter selling USD receipts"},
+    {"asset": "EUR/USD",            "side": "Sell", "notional": 2_500_000, "reason": "Speculative short EUR on ECB dovish expectations"},
+    {"asset": "GBP/USD",            "side": "Buy",  "notional": 1_500_000, "reason": "UK institutional buying GBP ahead of BoE meeting"},
+    {"asset": "USD/JPY",            "side": "Sell", "notional": 2_000_000, "reason": "Risk-off flow — selling USD/JPY (buying Yen safe haven)"},
+    {"asset": "Brent Crude (BZ=F)", "side": "Buy",  "notional": 1_000_000, "reason": "Energy company hedging future production"},
+    {"asset": "Brent Crude (BZ=F)", "side": "Sell", "notional": 800_000,   "reason": "Airline hedging fuel costs — selling crude futures"},
+    {"asset": "US 10Y (IEF)",       "side": "Buy",  "notional": 4_000_000, "reason": "Flight to safety — institutional buying Treasuries"},
+    {"asset": "US 10Y (IEF)",       "side": "Sell", "notional": 2_000_000, "reason": "Duration reduction — client cutting bond exposure on inflation fears"},
+    {"asset": "NASDAQ (QQQ)",       "side": "Buy",  "notional": 1_500_000, "reason": "Tech sector rotation — client adding tech exposure"},
+    {"asset": "NASDAQ (QQQ)",       "side": "Sell", "notional": 3_000_000, "reason": "AI bubble concern — reducing concentrated tech position"},
+    {"asset": "Copper (HG=F)",      "side": "Buy",  "notional": 600_000,   "reason": "China stimulus optimism — buying copper as growth proxy"},
+    {"asset": "US 30Y (TLT)",       "side": "Buy",  "notional": 5_000_000, "reason": "Pension buying long duration to match liabilities"},
+]
 
 
-def _get_risk_params() -> dict:
-    """Return risk params from session state (set by sidebar sliders)."""
-    return st.session_state.get("risk_params", DEFAULT_RISK_PARAMS)
+def init_flow_state():
+    """Initialise Streamlit session state for the flow trading simulator."""
+    defaults = {
+        "inventory":   {},   # {asset_label: net_notional_usd}
+        "flow_trades": [],   # list of trade dicts
+        "pnl": {
+            "spread_pnl":    0.0,
+            "hedge_pnl":     0.0,
+            "inventory_pnl": 0.0,
+        },
+        "hedge_trades": [],  # list of hedge dicts
+    }
+    for key, val in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = val
 
 
+def _get_spot(ticker: str) -> float | None:
+    """Fetch latest price for a ticker via yfinance."""
+    try:
+        import yfinance as yf
+        hist = yf.Ticker(ticker).history(period="2d")
+        if hist is not None and len(hist) > 0:
+            return float(hist["Close"].iloc[-1])
+    except Exception:
+        pass
+    return None
+
+
+def add_client_trade(asset_label: str, side: str, notional: float):
+    """
+    Record a client trade, update inventory, and book spread P&L.
+    side: "Buy" (client buys, we sell) or "Sell" (client sells, we buy).
+    """
+    asset = FLOW_ASSETS[asset_label]
+    spread_bps = asset["spread_bps"]
+
+    # Spread P&L: we earn the spread on every client trade
+    spread_earned = notional * (spread_bps / 10_000)
+    st.session_state["pnl"]["spread_pnl"] += spread_earned
+
+    # Inventory: client Buy → we are short (negative); client Sell → we are long (positive)
+    direction = -1 if side == "Buy" else 1
+    inv = st.session_state["inventory"]
+    inv[asset_label] = inv.get(asset_label, 0.0) + direction * notional
+
+    # Log the trade
+    st.session_state["flow_trades"].append({
+        "asset":       asset_label,
+        "client_side": side,
+        "notional":    notional,
+        "spread_earned": round(spread_earned, 2),
+    })
+
+
+def compute_hedge_for_inventory() -> list:
+    """
+    For any position exceeding HEDGE_THRESHOLD_USD, execute a hedge trade
+    and return a list of hedge descriptions.
+    """
+    hedges = []
+    inv = st.session_state["inventory"]
+
+    for asset_label, net_notional in list(inv.items()):
+        if abs(net_notional) < HEDGE_THRESHOLD_USD:
+            continue
+
+        asset = FLOW_ASSETS[asset_label]
+        hedge_ticker = asset["hedge_ticker"]
+        spot = _get_spot(hedge_ticker) or 100.0   # fallback price
+
+        # Hedge direction is opposite to our inventory
+        hedge_side = "Sell" if net_notional > 0 else "Buy"
+        hedge_notional = abs(net_notional)
+        units = hedge_notional / spot
+
+        # Mark inventory as hedged (zero it out)
+        inv[asset_label] = 0.0
+
+        hedge = {
+            "asset":          asset_label,
+            "hedge_ticker":   hedge_ticker,
+            "hedge_side":     hedge_side,
+            "hedge_notional": round(hedge_notional, 2),
+            "units":          round(units, 4),
+            "spot_price":     round(spot, 4),
+        }
+        st.session_state["hedge_trades"].append(hedge)
+        hedges.append(hedge)
+
+    return hedges
+
+
+def mark_to_market_inventory() -> float:
+    """
+    MTM remaining (unhedged) inventory against current market prices.
+    Returns the incremental P&L for this MTM step.
+    """
+    mtm_pnl = 0.0
+    inv = st.session_state["inventory"]
+
+    for asset_label, net_notional in inv.items():
+        if net_notional == 0:
+            continue
+        asset = FLOW_ASSETS[asset_label]
+        spot = _get_spot(asset["ticker"])
+        if spot is None:
+            continue
+        # Simplified MTM: assume entry was at yesterday's close (1-tick move = 0.01%)
+        pnl_estimate = net_notional * 0.0001
+        mtm_pnl += pnl_estimate
+
+    st.session_state["pnl"]["inventory_pnl"] += mtm_pnl
+    return mtm_pnl
 
 def render_flow_trading_tab():
     import random
@@ -177,371 +291,333 @@ def render_flow_trading_tab():
     init_flow_state()
 
     st.markdown("## 🏦 Flow Trading Simulator")
-    st.caption("You are a junior flow trader. Clients send orders — you decide whether to accept. Every hedge costs money through slippage, spread, and market impact. Informed clients can move the market against you. This is as close to real flow trading risk as a simulator gets.")
-
-    # ── RISK PARAMETER SIDEBAR ───────────────────────────────────
-    with st.expander("⚙️ Risk Parameters — Configure Your Market", expanded=False):
-        st.caption("Tune the risk environment. High volatility, tight slippage and toxic flow make your job harder — just like a stressed market.")
-        rp = st.session_state.get("risk_params", DEFAULT_RISK_PARAMS.copy())
-        c1, c2 = st.columns(2)
-        with c1:
-            rp["slippage_min_bps"]  = st.slider("Min Slippage (bps)", 0.5, 5.0, rp["slippage_min_bps"], 0.5)
-            rp["slippage_max_bps"]  = st.slider("Max Slippage (bps)", 1.0, 20.0, rp["slippage_max_bps"], 0.5)
-            rp["latency_min_ms"]    = st.slider("Min Latency (ms)", 50, 500, int(rp["latency_min_ms"]), 50)
-            rp["latency_max_ms"]    = st.slider("Max Latency (ms)", 500, 5000, int(rp["latency_max_ms"]), 100)
-            rp["volatility_factor"] = st.slider("Volatility Factor", 0.5, 3.0, rp["volatility_factor"], 0.1)
-        with c2:
-            rp["impact_factor"]     = st.slider("Market Impact Factor", 0.1, 2.0, rp["impact_factor"], 0.1)
-            rp["liquidity_usd"]     = st.select_slider("Liquidity ($)", [1_000_000, 5_000_000, 10_000_000, 50_000_000], int(rp["liquidity_usd"]))
-            rp["toxic_flow_prob"]   = st.slider("Toxic Flow Probability", 0.0, 0.5, rp["toxic_flow_prob"], 0.05)
-            rp["toxic_jump_bps"]    = st.slider("Toxic Jump (bps)", 5.0, 50.0, rp["toxic_jump_bps"], 1.0)
-            rp["overnight_vol_bps"] = st.slider("Overnight Vol (bps)", 10.0, 100.0, rp["overnight_vol_bps"], 5.0)
-        st.session_state["risk_params"] = rp
-
+    st.caption("You are a junior flow trader at a major investment bank. Clients call with orders — you decide whether to accept, and then manage the resulting inventory risk. Your goal: maximise spread income while keeping your book balanced.")
     st.markdown("---")
 
-    # ── INCOMING CLIENT ORDER ────────────────────────────────────
+    # ── AUTO-GENERATE CLIENT ORDER ───────────────────────────────
     st.markdown("### 📞 Incoming Client Order")
-    st.caption("A client order has arrived. Read the context carefully — is this a routine hedge or could this be informed flow? You have seconds to decide.")
+    st.caption("A client order has arrived. Read the context, decide whether to accept it, and if so at what size. In real life you have seconds to decide — the market is moving.")
 
+    # Generate or retrieve current order
     if "current_order" not in st.session_state or st.session_state.get("order_accepted", False) or st.session_state.get("order_rejected", False):
+        # Pick a scenario weighted by current market conditions
         scenario = random.choice(CLIENT_ORDER_SCENARIOS)
         st.session_state["current_order"] = scenario
         st.session_state["order_accepted"] = False
         st.session_state["order_rejected"] = False
-        st.session_state["order_is_toxic_hint"] = random.random() < (rp["toxic_flow_prob"] * 0.6)
 
-    order      = st.session_state["current_order"]
+    order = st.session_state["current_order"]
     asset_info = FLOW_ASSETS.get(order["asset"], {})
-    rp_current = _get_risk_params()
 
+    # Order card
     side_color = "#00ff88" if order["side"] == "Buy" else "#ff4d4d"
-    vol_adj_spread = asset_info.get("spread_bps", 1.0) * rp_current["volatility_factor"]
-    spread_if_acc  = order["notional"] * (vol_adj_spread / 10_000)
-    est_slip_cost  = order["notional"] * (rp_current["slippage_max_bps"] / 10_000 * 0.6)
-    est_net        = spread_if_acc - est_slip_cost
-
-    # Toxic flow hint (show warning 60% of the time when actually toxic)
-    if st.session_state.get("order_is_toxic_hint"):
-        st.warning("⚠️ Intelligence: This client has traded frequently before major moves. Exercise caution.")
-
     st.markdown(
-        f"<div class='card' style='border-left:4px solid {side_color};'>"
-        f"<div style='font-size:12px;color:#888;'>{_dt.now().strftime('%H:%M:%S')} — INCOMING ORDER</div>"
-        f"<div style='font-size:22px;font-weight:bold;color:{side_color};margin-top:4px;'>{order['side'].upper()} {order['asset']}</div>"
-        f"<div style='font-size:18px;color:#FFF;'>${order['notional']:,.0f} notional</div>"
-        f"<div style='font-size:13px;color:#AAA;margin-top:8px;'>📋 {order['reason']}</div>"
-        f"<div style='font-size:11px;color:#666;margin-top:4px;'>{asset_info.get('category','—')} | "
-        f"Client spread: {vol_adj_spread:.2f} bps (vol-adj) | Est. slippage: {rp_current['slippage_max_bps']*0.6:.1f} bps</div>"
-        f"</div>", unsafe_allow_html=True
+        f"<div class='card' style='border-left: 4px solid {side_color}; padding: 16px;'>"
+        f"<div style='font-size:13px; color:#888; margin-bottom:6px;'>INCOMING CLIENT ORDER — {_dt.now().strftime('%H:%M:%S')}</div>"
+        f"<div style='font-size:22px; font-weight:bold; color:{side_color};'>{order['side'].upper()} {order['asset']}</div>"
+        f"<div style='font-size:18px; color:#FFFFFF; margin-top:4px;'>${order['notional']:,.0f} notional</div>"
+        f"<div style='font-size:13px; color:#AAAAAA; margin-top:8px;'>📋 {order['reason']}</div>"
+        f"<div style='font-size:12px; color:#666; margin-top:6px;'>Category: {asset_info.get('category','—')} | Spread: {asset_info.get('spread_bps', 0):.1f} bps | {asset_info.get('description','')}</div>"
+        f"</div>",
+        unsafe_allow_html=True
     )
 
+    # Spread earned if accepted
+    spread_earned = order["notional"] * (asset_info.get("spread_bps", 1) / 10_000)
+    current_inv   = st.session_state["inventory"].get(order["asset"], 0)
+    direction     = -1 if order["side"] == "Buy" else 1
+    new_inv       = current_inv + direction * order["notional"]
+
     st.markdown("")
-    ic1, ic2, ic3, ic4 = st.columns(4)
-    current_inv = st.session_state["inventory"].get(order["asset"], 0)
-    direction   = -1 if order["side"] == "Buy" else 1
-    new_inv     = current_inv + direction * order["notional"]
+    ic1, ic2, ic3 = st.columns(3)
     with ic1:
-        st.markdown(f"<div class='card'><div class='label'>Gross Spread</div><div class='big-number' style='color:#00ff88;'>${spread_if_acc:,.0f}</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='card'><div class='label'>Spread Earned if Accepted</div><div class='big-number' style='color:#00ff88;'>${spread_earned:,.0f}</div></div>", unsafe_allow_html=True)
     with ic2:
-        st.markdown(f"<div class='card'><div class='label'>Est. Hedge Cost</div><div class='big-number' style='color:#ff4d4d;'>${est_slip_cost:,.0f}</div></div>", unsafe_allow_html=True)
+        cur_color = "#00ff88" if abs(current_inv) < HEDGE_THRESHOLD_USD else "#ff4d4d"
+        st.markdown(f"<div class='card'><div class='label'>Current {order['asset']} Inventory</div><div class='big-number' style='color:{cur_color};'>${current_inv:,.0f}</div></div>", unsafe_allow_html=True)
     with ic3:
-        net_col = "#00ff88" if est_net > 0 else "#ff4d4d"
-        st.markdown(f"<div class='card'><div class='label'>Est. Net P&L</div><div class='big-number' style='color:{net_col};'>${est_net:,.0f}</div></div>", unsafe_allow_html=True)
-    with ic4:
-        inv_col = "#ff4d4d" if abs(new_inv) > MAX_INVENTORY_USD else "#FFDC00" if abs(new_inv) > HEDGE_THRESHOLD_USD else "#00ff88"
-        st.markdown(f"<div class='card'><div class='label'>Inv. After Trade</div><div class='big-number' style='color:{inv_col};'>${new_inv:,.0f}</div></div>", unsafe_allow_html=True)
+        new_color = "#00ff88" if abs(new_inv) < HEDGE_THRESHOLD_USD else "#FFDC00" if abs(new_inv) < HEDGE_THRESHOLD_USD * 2 else "#ff4d4d"
+        st.markdown(f"<div class='card'><div class='label'>Inventory After Trade</div><div class='big-number' style='color:{new_color};'>${new_inv:,.0f}</div></div>", unsafe_allow_html=True)
 
-    if abs(new_inv) > MAX_INVENTORY_USD:
-        st.error(f"🚨 Accepting this trade will breach the ${MAX_INVENTORY_USD:,.0f} inventory limit — triggering a FORCED HEDGE at maximum penalty price.")
-    elif abs(new_inv) > HEDGE_THRESHOLD_USD:
-        st.warning(f"⚠️ This will push inventory above the ${HEDGE_THRESHOLD_USD:,.0f} hedge threshold. Hedge immediately after accepting.")
+    if abs(new_inv) >= HEDGE_THRESHOLD_USD:
+        st.warning(f"⚠️ Accepting this trade will push your {order['asset']} position to ${abs(new_inv):,.0f} — above the $500k hedge threshold. You'll need to hedge after accepting.")
 
-    accept_notional = st.slider("Adjust trade size", 100_000, int(order["notional"] * 1.5), int(order["notional"]), 100_000, format="$%d")
+    st.markdown("")
+
+    # Allow size adjustment
+    accept_notional = st.slider(
+        "Adjust trade size (USD)",
+        min_value=100_000,
+        max_value=int(order["notional"] * 1.5),
+        value=int(order["notional"]),
+        step=100_000,
+        format="$%d"
+    )
 
     col_acc, col_rej, col_new = st.columns(3)
     with col_acc:
         if st.button("✅ Accept Trade", type="primary"):
             add_client_trade(order["asset"], order["side"], accept_notional)
             st.session_state["order_accepted"] = True
-            if not hasattr(st.session_state, "trade_log"):
-                st.session_state["trade_log"] = []
-            last_trade = st.session_state["flow_trades"][-1] if st.session_state["flow_trades"] else {}
-            toxic_flag = "☠️ TOXIC" if last_trade.get("toxic") else ""
             st.session_state["trade_log"] = st.session_state.get("trade_log", [])
             st.session_state["trade_log"].append({
                 "time":     _dt.now().strftime("%H:%M:%S"),
-                "action":   f"ACCEPTED {toxic_flag}",
+                "action":   "ACCEPTED",
                 "asset":    order["asset"],
                 "side":     order["side"],
                 "notional": accept_notional,
-                "spread":   round(last_trade.get("spread_earned", 0), 2),
-                "toxic_loss": round(last_trade.get("toxic_loss", 0), 2),
+                "spread":   round(accept_notional * asset_info.get("spread_bps", 1) / 10_000, 2),
                 "reason":   order["reason"]
             })
+            st.success(f"✅ Trade accepted! Spread earned: ${accept_notional * asset_info.get('spread_bps',1) / 10_000:,.0f}")
             st.rerun()
     with col_rej:
         if st.button("❌ Reject Trade"):
             st.session_state["order_rejected"] = True
             st.session_state["trade_log"] = st.session_state.get("trade_log", [])
             st.session_state["trade_log"].append({
-                "time": _dt.now().strftime("%H:%M:%S"),
-                "action": "REJECTED", "asset": order["asset"],
-                "side": order["side"], "notional": order["notional"],
-                "spread": 0, "toxic_loss": 0, "reason": order["reason"]
+                "time":     _dt.now().strftime("%H:%M:%S"),
+                "action":   "REJECTED",
+                "asset":    order["asset"],
+                "side":     order["side"],
+                "notional": order["notional"],
+                "spread":   0,
+                "reason":   order["reason"]
             })
+            st.info("Order rejected. Next client order incoming...")
             st.rerun()
     with col_new:
         if st.button("🔄 New Order"):
             del st.session_state["current_order"]
             st.rerun()
 
-    # Manual entry
+    st.markdown("---")
+
+    # ── MANUAL TRADE ENTRY ───────────────────────────────────────
     with st.expander("➕ Enter Manual Trade", expanded=False):
+        st.caption("Enter your own trade manually — useful for testing specific scenarios.")
         categories = sorted(set(v["category"] for v in FLOW_ASSETS.values()))
-        cat_filter = st.selectbox("Filter", ["All"] + categories)
-        filtered   = [k for k, v in FLOW_ASSETS.items() if cat_filter == "All" or v["category"] == cat_filter]
-        m_asset    = st.selectbox("Asset", filtered, key="manual_asset")
-        m_side     = st.radio("Side", ["Buy", "Sell"], horizontal=True, key="manual_side")
-        m_notional = st.number_input("Notional", 100_000.0, 10_000_000.0, 1_000_000.0, 100_000.0, key="manual_notional")
-        if st.button("Add Trade"):
+        cat_filter = st.selectbox("Filter by asset class", ["All"] + categories)
+        filtered_assets = [k for k, v in FLOW_ASSETS.items() if cat_filter == "All" or v["category"] == cat_filter]
+        m_asset    = st.selectbox("Asset", filtered_assets, key="manual_asset")
+        m_side     = st.radio("Client side", ["Buy", "Sell"], horizontal=True, key="manual_side")
+        m_notional = st.number_input("Notional (USD)", min_value=100_000.0, value=1_000_000.0, step=100_000.0, key="manual_notional")
+        if st.button("Add Manual Trade"):
             add_client_trade(m_asset, m_side, m_notional)
-            st.success(f"Added: {m_side} {m_asset} ${m_notional:,.0f}")
+            st.success(f"Manual trade added: {m_side} {m_asset} ${m_notional:,.0f}")
             st.rerun()
 
     st.markdown("---")
 
-    # ── P&L BREAKDOWN ────────────────────────────────────────────
-    st.markdown("### 💰 P&L Breakdown")
-    st.caption("Every row below represents a real source of flow trading P&L. Spread income is your business. Everything else is a cost — your job is to minimise them.")
-
+    # ── INVENTORY & RISK MANAGEMENT ─────────────────────────────
+    st.markdown("### 📊 Your Trading Book")
+    inv = st.session_state["inventory"]
     pnl = st.session_state["pnl"]
     total_pnl = sum(pnl.values())
 
-    pnl_items = [
-        ("Spread P&L",        pnl["spread_pnl"],       "✅", "Income earned from client bid/offer spread"),
-        ("Hedge Slippage",    pnl["hedge_slippage"],    "📉", "Lost to worse-than-mid hedge prices"),
-        ("Market Impact",     pnl["market_impact"],     "🌊", "Large hedges moved the market against you"),
-        ("Inventory MTM",     pnl["inventory_mtm"],     "📊", "Mark-to-market on open positions"),
-        ("Toxic Flow",        pnl["toxic_flow"],        "☠️", "Losses from informed/fast clients"),
-        ("Overnight Risk",    pnl["overnight"],         "🌙", "Gap moves on overnight positions"),
-    ]
+    # P&L cards
+    p1, p2, p3, p4 = st.columns(4)
+    for col, label, key, tip in [
+        (p1, "Spread P&L",    "spread_pnl",    "Guaranteed — earned on every trade"),
+        (p2, "Hedge P&L",     "hedge_pnl",     "From hedges placed"),
+        (p3, "Inventory P&L", "inventory_pnl", "Mark-to-market"),
+        (p4, "Total P&L",     None,            "Your overall book"),
+    ]:
+        val = total_pnl if key is None else pnl.get(key, 0)
+        cc  = "#00ff88" if val >= 0 else "#ff4d4d"
+        with col:
+            st.markdown(f"<div class='card'><div class='label'>{label}</div><div class='big-number' style='color:{cc};'>${val:,.0f}</div><div class='label' style='font-size:10px;'>{tip}</div></div>", unsafe_allow_html=True)
 
-    cols = st.columns(3)
-    for i, (label, val, emoji, tip) in enumerate(pnl_items):
-        with cols[i % 3]:
-            color = "#00ff88" if val >= 0 else "#ff4d4d"
-            st.markdown(
-                f"<div class='card'><div class='label'>{emoji} {label}</div>"
-                f"<div class='big-number' style='color:{color};'>${val:,.0f}</div>"
-                f"<div class='label' style='font-size:10px;'>{tip}</div></div>",
-                unsafe_allow_html=True
-            )
+    st.markdown("")
 
-    total_color = "#00ff88" if total_pnl >= 0 else "#ff4d4d"
-    st.markdown(f"<div class='card' style='border: 1px solid {total_color}; margin-top:8px;'><div class='label'>TOTAL P&L</div><div class='big-number' style='color:{total_color};'>${total_pnl:,.0f}</div></div>", unsafe_allow_html=True)
+    if inv and any(v != 0 for v in inv.values()):
+        # Inventory bar chart grouped by category
+        assets_list  = [k for k, v in inv.items() if v != 0]
+        values_list  = [inv[k] for k in assets_list]
+        cats_list    = [FLOW_ASSETS.get(k, {}).get("category", "Other") for k in assets_list]
+        colors_list  = ["#00ff88" if v > 0 else "#ff4d4d" for v in values_list]
 
-    # P&L waterfall chart
-    if any(v != 0 for v in pnl.values()):
-        categories_pnl = [item[0] for item in pnl_items] + ["Total"]
-        values_pnl     = [item[1] for item in pnl_items] + [total_pnl]
-        colors_pnl     = ["#00ff88" if v >= 0 else "#ff4d4d" for v in values_pnl]
-        fig_pnl = go.Figure(go.Bar(
-            x=categories_pnl, y=values_pnl,
-            marker_color=colors_pnl,
-            text=[f"${v:,.0f}" for v in values_pnl],
-            textposition="outside"
-        ))
-        fig_pnl.update_layout(
-            template="plotly_dark", height=300,
-            title="P&L by Source", margin=dict(l=40,r=40,t=40,b=60),
-            yaxis=dict(gridcolor="#333"), xaxis=dict(showgrid=False)
-        )
-        st.plotly_chart(fig_pnl, use_container_width=True)
-
-    st.markdown("---")
-
-    # ── INVENTORY ────────────────────────────────────────────────
-    st.markdown("### 📊 Inventory")
-    inv = st.session_state["inventory"]
-    active_inv = {k: v for k, v in inv.items() if v != 0}
-
-    if active_inv:
-        assets_l  = list(active_inv.keys())
-        values_l  = list(active_inv.values())
         fig_inv = go.Figure(go.Bar(
-            x=assets_l, y=values_l,
-            marker_color=["#00ff88" if v > 0 else "#ff4d4d" for v in values_l],
-            text=[f"${abs(v):,.0f}" for v in values_l], textposition="outside"
+            x=assets_list, y=values_list,
+            marker_color=colors_list,
+            text=[f"${abs(v):,.0f}" for v in values_list],
+            textposition="outside",
+            customdata=cats_list,
+            hovertemplate="%{x}<br>%{customdata}<br>${%{y:,.0f}}<extra></extra>"
         ))
-        fig_inv.add_hline(y=HEDGE_THRESHOLD_USD,  line_dash="dash", line_color="#FFDC00", annotation_text="Hedge threshold")
-        fig_inv.add_hline(y=-HEDGE_THRESHOLD_USD, line_dash="dash", line_color="#FFDC00")
-        fig_inv.add_hline(y=MAX_INVENTORY_USD,    line_dash="dot",  line_color="#ff4d4d", annotation_text="MAX LIMIT")
-        fig_inv.add_hline(y=-MAX_INVENTORY_USD,   line_dash="dot",  line_color="#ff4d4d")
+        fig_inv.add_hline(y=HEDGE_THRESHOLD_USD,  line_dash="dash", line_color="#FFDC00",
+                          annotation_text="Hedge threshold (+)", annotation_position="right")
+        fig_inv.add_hline(y=-HEDGE_THRESHOLD_USD, line_dash="dash", line_color="#FFDC00",
+                          annotation_text="Hedge threshold (−)", annotation_position="right")
         fig_inv.update_layout(
-            template="plotly_dark", height=320,
-            title="Net Inventory (USD) — Yellow=hedge trigger, Red=forced hedge limit",
-            margin=dict(l=40,r=100,t=50,b=60),
-            yaxis=dict(gridcolor="#333"), xaxis=dict(showgrid=False, tickangle=-30)
+            template="plotly_dark", height=340,
+            title="Net Inventory by Asset (USD) — Yellow lines = hedge triggers",
+            margin=dict(l=40, r=100, t=50, b=60),
+            yaxis=dict(gridcolor="#333"),
+            xaxis=dict(showgrid=False, tickangle=-30)
         )
         st.plotly_chart(fig_inv, use_container_width=True)
+        st.caption("Green = long position (profit if price rises). Red = short position (profit if price falls). Yellow dashed lines = $500k hedge threshold. Bars crossing the threshold signal you need to hedge.")
 
-        for asset, notional in active_inv.items():
-            if abs(notional) >= HEDGE_THRESHOLD_USD:
-                loss_1pct = abs(notional) * 0.01
+        # Hedge signals
+        needs_hedge = {a: v for a, v in inv.items() if abs(v) >= HEDGE_THRESHOLD_USD}
+        if needs_hedge:
+            st.markdown("#### ⚠️ Hedge Signals")
+            for asset, notional in needs_hedge.items():
                 direction = "LONG" if notional > 0 else "SHORT"
-                st.warning(f"⚠️ **{asset}** {direction} ${abs(notional):,.0f} | 1% move costs: **${loss_1pct:,.0f}**")
-    else:
-        st.info("No open inventory. Accept a client trade to build your book.")
+                loss_1pct = abs(notional) * 0.01
+                st.warning(f"**{asset}** — {direction} ${abs(notional):,.0f} | 1% move against you = **${loss_1pct:,.0f} loss**")
 
-    # Hedge / MTM / Overnight buttons
-    hb1, hb2, hb3, hb4 = st.columns(4)
+    else:
+        st.info("No open positions. Accept a client order above to build your book.")
+
+    st.markdown("")
+
+    # Hedge and MTM buttons
+    hb1, hb2, hb3 = st.columns(3)
     with hb1:
-        if st.button("🛡️ Hedge Positions"):
+        if st.button("🛡️ Hedge All Positions"):
             hedges = compute_hedge_for_inventory()
             if hedges:
                 for h in hedges:
-                    st.success(f"Hedged {h['asset']}: cost ${h['total_cost']:,.0f} | Latency: {h['latency_ms']:.0f}ms")
+                    st.success(f"Hedged {h['asset']}: {h['hedge_side']} ${h['hedge_notional']:,.0f} via {h['hedge_ticker']}")
             else:
-                st.info("No positions above hedge threshold.")
+                st.info("No positions above threshold to hedge.")
             st.rerun()
     with hb2:
         if st.button("📊 Mark to Market"):
             mtm = mark_to_market_inventory()
-            col = "success" if mtm >= 0 else "error"
-            getattr(st, col)(f"MTM P&L: ${mtm:,.0f}")
+            color = "success" if mtm >= 0 else "error"
+            getattr(st, color)(f"MTM P&L this step: ${mtm:,.0f}")
     with hb3:
-        if st.button("🌙 Apply Overnight Risk"):
-            ovn = apply_overnight_risk()
-            col = "success" if ovn >= 0 else "error"
-            getattr(st, col)(f"Overnight P&L: ${ovn:,.0f}")
-    with hb4:
         if st.button("🔄 Reset Simulation"):
-            for key in ["inventory","flow_trades","hedge_trades","pnl","trade_log",
-                        "current_order","risk_events","entry_prices","trader_feedback"]:
+            for key in ["inventory","flow_trades","hedge_trades","pnl","trade_log","current_order","sp500_summary","risk_narrative"]:
                 if key in st.session_state:
                     del st.session_state[key]
+            st.success("Simulation reset.")
             st.rerun()
 
     st.markdown("---")
 
-    # ── RISK EVENT LOG ───────────────────────────────────────────
-    st.markdown("### ⚡ Risk Event Log")
-    risk_events = st.session_state.get("risk_events", [])
-    if risk_events:
-        for evt in reversed(risk_events[-20:]):
-            color = "#ff4d4d" if evt["pnl_impact"] < 0 else "#00ff88"
-            st.markdown(
-                f"<div class='card' style='margin-bottom:4px; border-left:3px solid {color};'>"
-                f"<span style='color:{color};font-weight:bold;'>{evt['type']}</span> "
-                f"<span style='color:#CCC;'>{evt['asset']}</span> — {evt['detail']} "
-                f"<span style='color:{color};float:right;'>${evt['pnl_impact']:,.0f}</span>"
-                f"</div>", unsafe_allow_html=True
-            )
-    else:
-        st.info("No risk events yet. Accept trades to see hedge costs, toxic flow events, and overnight risk.")
-
-    st.markdown("---")
-
-    # ── DECISION LOG ─────────────────────────────────────────────
+    # ── TRADE LOG ────────────────────────────────────────────────
     st.markdown("### 📋 Decision Log")
     trade_log = st.session_state.get("trade_log", [])
     if trade_log:
         log_df = pd.DataFrame(trade_log)
-        st.dataframe(log_df, use_container_width=True, hide_index=True)
-        accepted    = sum(1 for t in trade_log if "ACCEPTED" in t.get("action",""))
-        rejected    = sum(1 for t in trade_log if t.get("action") == "REJECTED")
-        total_spread= sum(t.get("spread",0) for t in trade_log)
-        total_toxic = sum(t.get("toxic_loss",0) for t in trade_log)
-        dl1,dl2,dl3,dl4 = st.columns(4)
-        with dl1: st.markdown(f"<div class='card'><div class='label'>Accepted</div><div class='big-number' style='color:#00ff88;'>{accepted}</div></div>", unsafe_allow_html=True)
-        with dl2: st.markdown(f"<div class='card'><div class='label'>Rejected</div><div class='big-number' style='color:#ff4d4d;'>{rejected}</div></div>", unsafe_allow_html=True)
-        with dl3: st.markdown(f"<div class='card'><div class='label'>Gross Spread</div><div class='big-number' style='color:#00ff88;'>${total_spread:,.0f}</div></div>", unsafe_allow_html=True)
-        with dl4: st.markdown(f"<div class='card'><div class='label'>Toxic Losses</div><div class='big-number' style='color:#ff4d4d;'>${total_toxic:,.0f}</div></div>", unsafe_allow_html=True)
+        # Colour accepted vs rejected
+        def highlight_row(row):
+            color = "background-color: rgba(0,255,136,0.08)" if row["action"] == "ACCEPTED" else "background-color: rgba(255,77,77,0.08)"
+            return [color] * len(row)
+        st.dataframe(log_df.style.apply(highlight_row, axis=1), use_container_width=True, hide_index=True)
+        accepted = sum(1 for t in trade_log if t["action"] == "ACCEPTED")
+        rejected = sum(1 for t in trade_log if t["action"] == "REJECTED")
+        total_spread = sum(t.get("spread", 0) for t in trade_log)
+        dl1, dl2, dl3 = st.columns(3)
+        with dl1:
+            st.markdown(f"<div class='card'><div class='label'>Orders Accepted</div><div class='big-number' style='color:#00ff88;'>{accepted}</div></div>", unsafe_allow_html=True)
+        with dl2:
+            st.markdown(f"<div class='card'><div class='label'>Orders Rejected</div><div class='big-number' style='color:#ff4d4d;'>{rejected}</div></div>", unsafe_allow_html=True)
+        with dl3:
+            st.markdown(f"<div class='card'><div class='label'>Total Spread Earned</div><div class='big-number' style='color:#00ff88;'>${total_spread:,.0f}</div></div>", unsafe_allow_html=True)
     else:
-        st.info("No trades yet.")
+        st.info("No trades yet — accept or reject the incoming client order above.")
 
     st.markdown("---")
 
-    # ── AI TRADING COACH ─────────────────────────────────────────
+    # ── AI PERFORMANCE FEEDBACK ──────────────────────────────────
     st.markdown("### 🤖 AI Trading Coach")
-    st.caption("After making decisions, get scored and coached on your risk management.")
+    st.caption("Once you have made some decisions, get scored and coached by GPT on your risk management, decision quality, and what a real flow trader would have done differently.")
 
     if st.button("📈 Get Performance Feedback", key="perf_feedback_btn"):
-        trade_log = st.session_state.get("trade_log", [])
         if not trade_log:
-            st.warning("Make some trading decisions first.")
+            st.warning("Make some trading decisions first before requesting feedback.")
         else:
-            with st.spinner("Analysing your trading session..."):
+            with st.spinner("Analysing your trading decisions..."):
                 try:
                     from gpt_layer import call_gpt_prose
-                    accepted_t = [t for t in trade_log if "ACCEPTED" in t.get("action","")]
-                    rejected_t = [t for t in trade_log if t.get("action") == "REJECTED"]
-                    inv_summary = {k: v for k, v in st.session_state.get("inventory",{}).items() if v!=0}
-                    pnl_summary = st.session_state["pnl"]
+                    accepted_trades = [t for t in trade_log if t["action"] == "ACCEPTED"]
+                    rejected_trades = [t for t in trade_log if t["action"] == "REJECTED"]
+                    inv_summary = {k: v for k, v in st.session_state.get("inventory", {}).items() if v != 0}
 
-                    prompt = f"""You are a senior flow trading mentor reviewing a simulation session.
+                    feedback_prompt = f"""You are a senior flow trading mentor at a major investment bank, reviewing a junior trader's simulation session.
 
-SESSION P&L BREAKDOWN:
-- Spread earned: ${pnl_summary['spread_pnl']:,.0f}
-- Hedge slippage lost: ${pnl_summary['hedge_slippage']:,.0f}
-- Market impact lost: ${pnl_summary['market_impact']:,.0f}
-- Inventory MTM: ${pnl_summary['inventory_mtm']:,.0f}
-- Toxic flow losses: ${pnl_summary['toxic_flow']:,.0f}
-- Overnight P&L: ${pnl_summary['overnight']:,.0f}
-- TOTAL: ${sum(pnl_summary.values()):,.0f}
+TRADING SESSION SUMMARY:
+- Orders accepted: {len(accepted_trades)}
+- Orders rejected: {len(rejected_trades)}
+- Total spread earned: ${sum(t.get('spread',0) for t in trade_log):,.0f}
+- Total P&L: ${total_pnl:,.0f}
+- Current open inventory: {inv_summary if inv_summary else "Flat (no open positions)"}
 
-DECISIONS:
-- Accepted: {len(accepted_t)} trades | Rejected: {len(rejected_t)} trades
-- Open inventory: {inv_summary if inv_summary else "Flat"}
-- Accepted trades: {[f"{t['side']} {t['asset']} ${t['notional']:,.0f}" for t in accepted_t[:5]]}
-- Rejected trades: {[f"{t['side']} {t['asset']} ${t['notional']:,.0f}" for t in rejected_t[:5]]}
+ACCEPTED TRADES:
+{chr(10).join(f"- {t['side']} {t['asset']} ${t['notional']:,.0f} | {t['reason']}" for t in accepted_trades) if accepted_trades else "None"}
 
-RISK PARAMS USED:
-- Volatility factor: {_get_risk_params()['volatility_factor']:.1f}x
-- Toxic flow prob: {_get_risk_params()['toxic_flow_prob']*100:.0f}%
-- Slippage range: {_get_risk_params()['slippage_min_bps']:.1f}–{_get_risk_params()['slippage_max_bps']:.1f} bps
+REJECTED TRADES:
+{chr(10).join(f"- {t['side']} {t['asset']} ${t['notional']:,.0f} | {t['reason']}" for t in rejected_trades) if rejected_trades else "None"}
 
-Provide:
-1. Risk Management Score: XX/100
-2. Decision Quality Score: XX/100
-3. What they did well (2 sentences)
-4. What a real senior trader would have done differently (2-3 sentences)
-5. The single most important lesson from this session
+Please provide:
+1. A SCORE out of 100 for overall risk management (format: "Risk Management Score: XX/100")
+2. A SCORE out of 100 for decision quality (format: "Decision Quality Score: XX/100")
+3. What the trader did well (2-3 sentences)
+4. What a real senior flow trader would have done differently (2-3 sentences)
+5. One specific lesson to take away from this session
 
-Be specific about the numbers. Reference the actual P&L sources. Mentor tone — tough but constructive."""
+Be direct, constructive, and realistic. Use a mentor tone — tough but fair."""
 
-                    feedback = call_gpt_prose(prompt)
+                    feedback = call_gpt_prose(feedback_prompt)
                     st.session_state["trader_feedback"] = feedback or "Could not generate feedback."
                 except Exception as e:
                     st.session_state["trader_feedback"] = f"Error: {e}"
 
-    feedback_text = st.session_state.get("trader_feedback", "Click above to get AI coaching feedback on your session.")
-    st.markdown(f"<div class='card' style='line-height:1.8;color:#DDDDDD;white-space:pre-wrap;'>{feedback_text}</div>", unsafe_allow_html=True)
+    feedback_text = st.session_state.get("trader_feedback", "Click above after making some trading decisions to get AI coaching feedback.")
+    st.markdown(f"<div class='card' style='line-height:1.8; color:#DDDDDD; white-space:pre-wrap;'>{feedback_text}</div>", unsafe_allow_html=True)
 
-    # Flow Trading Guide
+    # Trader tip of the session
     st.markdown("---")
-    with st.expander("📚 Flow Trading Guide — Understanding Risk", expanded=False):
+    with st.expander("📚 Flow Trading Guide — Key Concepts", expanded=False):
         st.markdown("""
-**Why can't I always make money?**
-In a real market, you never hedge at the same price you trade with a client. Every hedge has costs:
+**What is flow trading?**
+Flow traders (also called market makers) sit between clients and the market. When a client wants to buy or sell, you take the other side — immediately. You profit from the bid/offer spread on every trade. Your job is then to manage the resulting inventory risk.
 
-- **Slippage** — the market moves between when you trade and when you hedge. Even milliseconds matter.
-- **Bid/ask spread** — when you hedge, you pay the ask (buying) or hit the bid (selling). You're always on the wrong side.
-- **Market impact** — large trades move the price against you. A $5m S&P hedge pushes the ask up as you buy.
-- **Latency** — your hedge order takes time to reach the exchange. The market drifts in that window.
+**The bid/offer spread**
+Every asset has a price you'll buy at (bid) and a price you'll sell at (offer). The difference is the spread — your guaranteed profit on every trade. Tighter spreads = more competitive but less profit per trade.
 
-**Toxic flow — the biggest hidden risk**
-Some clients know something you don't. After they trade, the market jumps in their direction — and against your hedge. Identifying toxic clients (frequent traders, hedge funds with good track records) before accepting is a core skill.
+**Inventory risk**
+When you take the other side of a client trade, you build up inventory. If a client buys $5m of S&P 500 from you, you're now short $5m of S&P 500. If the market rises, you lose money. This is inventory risk — and managing it is the core skill of flow trading.
 
-**Overnight risk**
-Holding inventory into the close is dangerous. Overnight, markets can gap significantly on news. A $1m overnight long on crude oil can gap down 3% on an OPEC headline — a $30,000 loss before markets even open.
+**Hedging**
+To reduce inventory risk, you hedge — placing an offsetting trade in the market. If you're short $5m S&P 500, you buy $5m SPY to hedge. The hedge costs money (you cross the spread yourself) but removes the market risk.
 
-**The spread-risk tradeoff**
-Your spread income is predictable and small. Your risk costs are unpredictable and potentially large. The goal isn't to maximise trades accepted — it's to maximise **risk-adjusted** spread income.
+**The flow trader's dilemma**
+- Accept every trade → maximise spread income but accumulate risk
+- Reject trades → no risk but no income either
+- The skill is knowing WHEN to accept, WHEN to reduce size, and WHEN to hedge immediately
+
+**Asset class nuances**
+- **FX**: Very liquid, tight spreads, but large notionals. Corporate hedgers are predictable; speculators are not.
+- **Rates**: Sensitive to macro news. Flight-to-safety flows can be very large and one-directional.
+- **Equities**: Index flows often tied to rebalancing. Large directional flows from hedge funds are dangerous to hold.
+- **Commodities**: Seasonal patterns matter. Producer hedging (airlines, energy companies) is regular and predictable.
         """)
 
 
+# ---------- TABS INITIALIZATION ----------
+tabs = st.tabs(["Macro", "Risk", "Commodities", "S&P500", "Flow Trading"])
+
+# ---------- LOAD MARKET DATA ----------
+prices = get_market_data()
+# Sanitise — guarantee change is always float or 0, never None
+for _k in list(prices.keys()):
+    if prices[_k] is None:
+        prices[_k] = {"price": None, "change": 0}
+    elif prices[_k].get("change") is None:
+        prices[_k]["change"] = 0
+    else:
+        try:
+            prices[_k]["change"] = float(prices[_k]["change"])
+        except Exception:
+            prices[_k]["change"] = 0
+
+# ---------- THEME EXTRACTION ----------
 def extract_news_themes(news):
     themes = {
         "oil_supply": False,
@@ -983,7 +1059,7 @@ Bloomberg style. Direct. Plain prose only."""
     st.markdown("### 💬 Ask the Trading Assistant")
     st.caption("Ask anything about markets, trading, or what you see on this tab. Powered by GPT.")
 
-    tab_chat_key = f"chat_history_{"Macro"}"
+    tab_chat_key = f"chat_history_Macro"
     if tab_chat_key not in st.session_state:
         st.session_state[tab_chat_key] = []
 
@@ -991,7 +1067,7 @@ Bloomberg style. Direct. Plain prose only."""
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    if _question := st.chat_input(f"Ask about {"Macro"}...", key=f"chat_input_{"Macro"}"):
+    if _question := st.chat_input(f"Ask about Macro...", key=f"chat_input_Macro"):
         st.session_state[tab_chat_key].append({"role": "user", "content": _question})
         with st.chat_message("user"):
             st.markdown(_question)
@@ -1022,7 +1098,7 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
                     st.markdown(f"Error: {e}")
 
     if st.session_state.get(tab_chat_key):
-        if st.button("🗑️ Clear chat", key=f"clear_chat_{"Macro"}"):
+        if st.button("🗑️ Clear chat", key=f"clear_chat_Macro"):
             st.session_state[tab_chat_key] = []
             st.rerun()
 
@@ -1214,7 +1290,7 @@ Bloomberg style. Direct. Plain prose only."""
     st.markdown("### 💬 Ask the Trading Assistant")
     st.caption("Ask anything about markets, trading, or what you see on this tab. Powered by GPT.")
 
-    tab_chat_key = f"chat_history_{"Risk"}"
+    tab_chat_key = f"chat_history_Risk"
     if tab_chat_key not in st.session_state:
         st.session_state[tab_chat_key] = []
 
@@ -1222,7 +1298,7 @@ Bloomberg style. Direct. Plain prose only."""
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    if _question := st.chat_input(f"Ask about {"Risk"}...", key=f"chat_input_{"Risk"}"):
+    if _question := st.chat_input(f"Ask about Risk...", key=f"chat_input_Risk"):
         st.session_state[tab_chat_key].append({"role": "user", "content": _question})
         with st.chat_message("user"):
             st.markdown(_question)
@@ -1253,7 +1329,7 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
                     st.markdown(f"Error: {e}")
 
     if st.session_state.get(tab_chat_key):
-        if st.button("🗑️ Clear chat", key=f"clear_chat_{"Risk"}"):
+        if st.button("🗑️ Clear chat", key=f"clear_chat_Risk"):
             st.session_state[tab_chat_key] = []
             st.rerun()
 
@@ -1693,7 +1769,7 @@ Bloomberg terminal style. Professional and direct. Plain prose only. No bullet p
     st.markdown("### 💬 Ask the Trading Assistant")
     st.caption("Ask anything about markets, trading, or what you see on this tab. Powered by GPT.")
 
-    tab_chat_key = f"chat_history_{"Commodities"}"
+    tab_chat_key = f"chat_history_Commodities"
     if tab_chat_key not in st.session_state:
         st.session_state[tab_chat_key] = []
 
@@ -1701,7 +1777,7 @@ Bloomberg terminal style. Professional and direct. Plain prose only. No bullet p
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    if _question := st.chat_input(f"Ask about {"Commodities"}...", key=f"chat_input_{"Commodities"}"):
+    if _question := st.chat_input(f"Ask about Commodities...", key=f"chat_input_Commodities"):
         st.session_state[tab_chat_key].append({"role": "user", "content": _question})
         with st.chat_message("user"):
             st.markdown(_question)
@@ -1732,7 +1808,7 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
                     st.markdown(f"Error: {e}")
 
     if st.session_state.get(tab_chat_key):
-        if st.button("🗑️ Clear chat", key=f"clear_chat_{"Commodities"}"):
+        if st.button("🗑️ Clear chat", key=f"clear_chat_Commodities"):
             st.session_state[tab_chat_key] = []
             st.rerun()
 
@@ -1749,7 +1825,7 @@ with tabs[3]:
     st.markdown("### 💬 Ask the Trading Assistant")
     st.caption("Ask anything about markets, trading, or what you see on this tab. Powered by GPT.")
 
-    tab_chat_key = f"chat_history_{"S&P500"}"
+    tab_chat_key = f"chat_history_S&P500"
     if tab_chat_key not in st.session_state:
         st.session_state[tab_chat_key] = []
 
@@ -1757,7 +1833,7 @@ with tabs[3]:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    if _question := st.chat_input(f"Ask about {"S&P500"}...", key=f"chat_input_{"S&P500"}"):
+    if _question := st.chat_input(f"Ask about S&P500...", key=f"chat_input_S&P500"):
         st.session_state[tab_chat_key].append({"role": "user", "content": _question})
         with st.chat_message("user"):
             st.markdown(_question)
@@ -1788,7 +1864,7 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
                     st.markdown(f"Error: {e}")
 
     if st.session_state.get(tab_chat_key):
-        if st.button("🗑️ Clear chat", key=f"clear_chat_{"S&P500"}"):
+        if st.button("🗑️ Clear chat", key=f"clear_chat_S&P500"):
             st.session_state[tab_chat_key] = []
             st.rerun()
 
@@ -1866,7 +1942,7 @@ with tabs[4]:
     st.markdown("### 💬 Ask the Trading Assistant")
     st.caption("Ask anything about markets, trading, or what you see on this tab. Powered by GPT.")
 
-    tab_chat_key = f"chat_history_{"Flow Trading"}"
+    tab_chat_key = f"chat_history_Flow Trading"
     if tab_chat_key not in st.session_state:
         st.session_state[tab_chat_key] = []
 
@@ -1874,7 +1950,7 @@ with tabs[4]:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    if _question := st.chat_input(f"Ask about {"Flow Trading"}...", key=f"chat_input_{"Flow Trading"}"):
+    if _question := st.chat_input(f"Ask about Flow Trading...", key=f"chat_input_Flow Trading"):
         st.session_state[tab_chat_key].append({"role": "user", "content": _question})
         with st.chat_message("user"):
             st.markdown(_question)
@@ -1905,6 +1981,6 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
                     st.markdown(f"Error: {e}")
 
     if st.session_state.get(tab_chat_key):
-        if st.button("🗑️ Clear chat", key=f"clear_chat_{"Flow Trading"}"):
+        if st.button("🗑️ Clear chat", key=f"clear_chat_Flow Trading"):
             st.session_state[tab_chat_key] = []
             st.rerun()
