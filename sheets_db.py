@@ -127,60 +127,78 @@ def save_news_to_sheets(new_results: list) -> None:
         print(f"[Sheets] Save error: {e}")
 
 # ══════════════════════════════════════════════════════════════
-# GPT ANALYSIS PERSISTENCE — stored in a second sheet tab
-# so it survives app restarts and redeploys
+# USER DATA PERSISTENCE — saves per-user data to Google Sheets
 # ══════════════════════════════════════════════════════════════
-GPT_TAB_NAME = "gpt_analysis"
+USER_TAB_NAME = "user_data"
 
-
-def _get_gpt_sheet():
-    """Get or create the gpt_analysis worksheet."""
+def _get_user_sheet():
     try:
         creds_dict = dict(st.secrets["gcp_service_account"])
         creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
         gc = gspread.authorize(creds)
         sh = gc.open(SHEET_NAME)
         try:
-            return sh.worksheet(GPT_TAB_NAME)
+            return sh.worksheet(USER_TAB_NAME)
         except gspread.WorksheetNotFound:
-            ws = sh.add_worksheet(title=GPT_TAB_NAME, rows=10, cols=2)
-            ws.append_row(["key", "value"])
+            ws = sh.add_worksheet(title=USER_TAB_NAME, rows=500, cols=3)
+            ws.append_row(["username", "key", "value"])
             return ws
     except Exception as e:
-        print(f"[GPT Sheet] Connection error: {e}")
+        print(f"[User Sheet] Connection error: {e}")
         return None
 
 
-def save_gpt_analysis(gpt_data: dict) -> None:
-    """Persist GPT analysis dict to Google Sheets."""
-    if not gpt_data:
-        return
+def save_user_data(username: str, key: str, value) -> None:
+    """Save a JSON-serialisable value for a user."""
     try:
         import json
-        ws = _get_gpt_sheet()
+        ws = _get_user_sheet()
         if ws is None:
             return
-        ws.clear()
-        ws.append_row(["key", "value"])
-        ws.append_row(["gpt_analysis", json.dumps(gpt_data)])
-        ws.append_row(["saved_at", str(pd.Timestamp.now(tz="UTC"))])
-        print("[GPT Sheet] GPT analysis saved.")
+        records = ws.get_all_records()
+        # Find existing row and update, or append new
+        for idx, row in enumerate(records, start=2):  # row 1 is header
+            if row.get("username") == username and row.get("key") == key:
+                ws.update_cell(idx, 3, json.dumps(value))
+                print(f"[User Sheet] Updated {username}/{key}")
+                return
+        # Not found — append
+        ws.append_row([username, key, json.dumps(value)])
+        print(f"[User Sheet] Saved {username}/{key}")
     except Exception as e:
-        print(f"[GPT Sheet] Save error: {e}")
+        print(f"[User Sheet] Save error: {e}")
 
 
-def load_gpt_analysis() -> dict | None:
-    """Load GPT analysis from Google Sheets."""
+def load_user_data(username: str, key: str):
+    """Load a value for a user. Returns None if not found."""
     try:
         import json
-        ws = _get_gpt_sheet()
+        ws = _get_user_sheet()
         if ws is None:
             return None
         records = ws.get_all_records()
         for row in records:
-            if row.get("key") == "gpt_analysis":
+            if row.get("username") == username and row.get("key") == key:
                 return json.loads(row["value"])
         return None
     except Exception as e:
-        print(f"[GPT Sheet] Load error: {e}")
+        print(f"[User Sheet] Load error: {e}")
         return None
+
+
+def load_all_user_data(username: str) -> dict:
+    """Load all saved data for a user as a dict."""
+    try:
+        import json
+        ws = _get_user_sheet()
+        if ws is None:
+            return {}
+        records = ws.get_all_records()
+        return {
+            row["key"]: json.loads(row["value"])
+            for row in records
+            if row.get("username") == username and row.get("key") and row.get("value")
+        }
+    except Exception as e:
+        print(f"[User Sheet] Load all error: {e}")
+        return {}

@@ -360,6 +360,14 @@ def render_flow_trading_tab():
 
     # ── RISK PARAMETERS SIDEBAR ─────────────────────────────────
     with st.sidebar:
+        # User info + logout
+        _user = st.session_state.get("username", "")
+        st.markdown(f"👤 **{_user}**")
+        if st.button("Sign Out", key="logout_btn"):
+            for k in list(st.session_state.keys()):
+                del st.session_state[k]
+            st.rerun()
+        st.markdown("---")
         st.markdown("## ⚙️ Risk Parameters")
         st.caption("Tune the simulation to reflect different market conditions.")
         rp = st.session_state.get("risk_params", DEFAULT_RISK_PARAMS.copy())
@@ -704,6 +712,79 @@ To reduce inventory risk, you hedge — placing an offsetting trade in the marke
 - **Commodities**: Seasonal patterns matter. Producer hedging (airlines, energy companies) is regular and predictable.
         """)
 
+
+# ══════════════════════════════════════════════════════════════
+# AUTHENTICATION — simple password login, persists via session
+# ══════════════════════════════════════════════════════════════
+def _check_login():
+    """Returns True if user is logged in, False otherwise."""
+    return st.session_state.get("logged_in", False)
+
+def _do_login(username: str, password: str) -> bool:
+    """Check credentials against Streamlit secrets."""
+    try:
+        users = st.secrets.get("users", {})
+        return users.get(username.lower().strip()) == password
+    except Exception:
+        return False
+
+def _load_user_session(username: str):
+    """Load all persisted data for this user into session state."""
+    try:
+        from sheets_db import load_all_user_data
+        data = load_all_user_data(username)
+        if data.get("prep_scores"):
+            st.session_state["prep_scores"] = data["prep_scores"]
+        if data.get("trade_ideas"):
+            st.session_state["trade_ideas"] = data["trade_ideas"]
+        print(f"[Auth] Loaded session for {username}")
+    except Exception as e:
+        print(f"[Auth] Load error: {e}")
+
+def _save_user_session(username: str):
+    """Persist key session data for this user to Sheets."""
+    try:
+        from sheets_db import save_user_data
+        if "prep_scores" in st.session_state:
+            save_user_data(username, "prep_scores", st.session_state["prep_scores"])
+        if "trade_ideas" in st.session_state:
+            save_user_data(username, "trade_ideas", st.session_state["trade_ideas"])
+    except Exception as e:
+        print(f"[Auth] Save error: {e}")
+
+# Show login screen if not authenticated
+if not _check_login():
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    col_l, col_m, col_r = st.columns([1, 1.5, 1])
+    with col_m:
+        st.markdown(
+            "<div style='text-align:center; margin-bottom:32px;'>"
+            "<div style='font-size:36px;'>📈</div>"
+            "<div style='font-size:28px; font-weight:bold; color:#FFFFFF;'>Macro Terminal</div>"
+            "<div style='font-size:14px; color:#888; margin-top:4px;'>Sign in to access your dashboard</div>"
+            "</div>",
+            unsafe_allow_html=True
+        )
+        with st.form("login_form"):
+            username = st.text_input("Username", placeholder="Enter your username")
+            password = st.text_input("Password", type="password", placeholder="Enter your password")
+            submitted = st.form_submit_button("Sign In", type="primary", use_container_width=True)
+
+            if submitted:
+                if _do_login(username, password):
+                    st.session_state["logged_in"]  = True
+                    st.session_state["username"]   = username.lower().strip()
+                    _load_user_session(st.session_state["username"])
+                    st.success(f"Welcome back, {username}! Loading your dashboard...")
+                    st.rerun()
+                else:
+                    st.error("Incorrect username or password.")
+    st.stop()
+
+# ── Auto-save on every run (lightweight — only writes if data changed) ──
+_current_user = st.session_state.get("username", "")
+if _current_user:
+    _save_user_session(_current_user)
 
 # ---------- TABS INITIALIZATION ----------
 tabs = st.tabs(["Macro", "Risk", "Commodities", "S&P500", "Flow Trading", "Trade Ideas", "Econ Calendar", "Interview Prep"])
