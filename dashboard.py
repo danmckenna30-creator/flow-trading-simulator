@@ -985,12 +985,15 @@ with tabs[0]:
                 # Clean URL — handle NaN, None, empty
                 url = str(raw_url).strip() if raw_url and str(raw_url) not in ["nan", "None", ""] else ""
 
+                # Use article URL if available, otherwise fall back to Google News search
+                import urllib.parse as _up
                 if url.startswith("http"):
-                    link_start = f'<a href="{url}" target="_blank" style="color:#00c3ff; font-weight:500; text-decoration:none;">'
-                    link_end   = " ↗</a>"
+                    final_url = url
                 else:
-                    link_start = '<span style="color:#FFFFFF; font-weight:500;">'
-                    link_end   = "</span>"
+                    final_url = "https://news.google.com/search?q=" + _up.quote(headline)
+
+                link_start = f'<a href="{final_url}" target="_blank" style="color:#00c3ff; font-weight:500; text-decoration:none;">'
+                link_end   = " ↗</a>"
 
                 html = (
                     '<div style="padding:7px 0; border-bottom:1px solid #222;">' +
