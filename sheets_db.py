@@ -1,6 +1,6 @@
 """
-sheets_db.py — Google Sheets as a persistent news database.
-Reads/writes the last 24 hours of news articles.
+sheets_db.py — Google Sheets as persistent storage for the Macro Terminal.
+Handles: news articles, GPT analysis, and per-user data.
 """
 import os
 import json
@@ -15,33 +15,44 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive"
 ]
 
-SHEET_NAME = "MacroNewsData"   # name of the Google Sheet
-TAB_NAME   = "news"            # worksheet tab name
+SHEET_NAME = "MacroNewsData"
+TAB_NAME   = "news"
+COLUMNS    = ["id", "date", "source", "headline", "sentiment",
+              "relevance", "topic", "escalate", "url"]
 
-COLUMNS = ["id", "date", "source", "headline", "sentiment",
-           "relevance", "topic", "escalate", "url"]
 
+def _get_client():
+    """Return an authorised gspread client."""
+    creds_dict = dict(st.secrets["gcp_service_account"])
+    creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+    return gspread.authorize(creds)
+
+
+def _open_or_create_tab(tab_name: str, headers: list) -> gspread.Worksheet:
+    """Open a worksheet tab, creating it with headers if it doesn't exist."""
+    gc = _get_client()
+    sh = gc.open(SHEET_NAME)
+    try:
+        return sh.worksheet(tab_name)
+    except gspread.WorksheetNotFound:
+        ws = sh.add_worksheet(title=tab_name, rows=5000, cols=max(len(headers), 3))
+        ws.append_row(headers)
+        return ws
+
+
+# ══════════════════════════════════════════════════════════════
+# NEWS — read/write last 24h of headlines
+# ══════════════════════════════════════════════════════════════
 
 def get_sheet():
-    """Connect to Google Sheets using service account credentials from Streamlit secrets."""
     try:
-        creds_dict = dict(st.secrets["gcp_service_account"])
-        creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
-        gc = gspread.authorize(creds)
-        sh = gc.open(SHEET_NAME)
-        try:
-            ws = sh.worksheet(TAB_NAME)
-        except gspread.WorksheetNotFound:
-            ws = sh.add_worksheet(title=TAB_NAME, rows=5000, cols=len(COLUMNS))
-            ws.append_row(COLUMNS)  # add header
-        return ws
+        return _open_or_create_tab(TAB_NAME, COLUMNS)
     except Exception as e:
         print(f"[Sheets] Connection error: {e}")
         return None
 
 
 def load_news_from_sheets() -> pd.DataFrame | None:
-    """Load last 24 hours of news from Google Sheets."""
     ws = get_sheet()
     if ws is None:
         return None
@@ -60,46 +71,33 @@ def load_news_from_sheets() -> pd.DataFrame | None:
 
 
 def save_news_to_sheets(new_results: list) -> None:
-    """
-    Append new articles to the sheet.
-    Removes articles older than 24 hours to keep the sheet lean.
-    """
     if not new_results:
         return
-
     ws = get_sheet()
     if ws is None:
         return
-
     try:
-        # Load existing data
         records = ws.get_all_records()
         existing_ids = {r["id"] for r in records if r.get("id")}
-
-        # Filter to truly new articles
         to_add = [r for r in new_results if r.get("id") not in existing_ids]
         if not to_add:
             print("[Sheets] No new articles to add.")
             return
 
-        # Append new rows
-        rows = [
-            [
-                str(r.get("id", "")),
-                str(r.get("date", "")),
-                str(r.get("source", "")),
-                str(r.get("headline", "")),
-                float(r.get("sentiment", 0)),
-                float(r.get("relevance", 0)),
-                str(r.get("topic", "")),
-                str(r.get("escalate", False)),
-                str(r.get("url", "")),
-            ]
-            for r in to_add
-        ]
+        rows = [[
+            str(r.get("id", "")),
+            str(r.get("date", "")),
+            str(r.get("source", "")),
+            str(r.get("headline", "")),
+            float(r.get("sentiment", 0)),
+            float(r.get("relevance", 0)),
+            str(r.get("topic", "")),
+            str(r.get("escalate", False)),
+            str(r.get("url", "")),
+        ] for r in to_add]
         ws.append_rows(rows, value_input_option="RAW")
 
-        # Prune rows older than 24 hours to keep sheet clean
+        # Prune rows older than 24h
         cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
         all_records = ws.get_all_records()
         rows_to_keep = []
@@ -111,38 +109,61 @@ def save_news_to_sheets(new_results: list) -> None:
             except Exception:
                 rows_to_keep.append(rec)
 
-        # Rewrite sheet if we pruned anything
         if len(rows_to_keep) < len(all_records):
             ws.clear()
             ws.append_row(COLUMNS)
-            keep_rows = [
-                [str(r.get(c, "")) for c in COLUMNS]
-                for r in rows_to_keep
-            ]
+            keep_rows = [[str(r.get(c, "")) for c in COLUMNS] for r in rows_to_keep]
             ws.append_rows(keep_rows, value_input_option="RAW")
 
         print(f"[Sheets] Added {len(to_add)} articles.")
-
     except Exception as e:
         print(f"[Sheets] Save error: {e}")
 
+
 # ══════════════════════════════════════════════════════════════
-# USER DATA PERSISTENCE — saves per-user data to Google Sheets
+# GPT ANALYSIS — persists the latest macro analysis
+# ══════════════════════════════════════════════════════════════
+GPT_TAB_NAME = "gpt_analysis"
+
+
+def save_gpt_analysis(gpt_data: dict) -> None:
+    """Persist GPT analysis dict to Google Sheets."""
+    if not gpt_data:
+        return
+    try:
+        ws = _open_or_create_tab(GPT_TAB_NAME, ["key", "value"])
+        ws.clear()
+        ws.append_row(["key", "value"])
+        ws.append_row(["gpt_analysis", json.dumps(gpt_data)])
+        ws.append_row(["saved_at", str(pd.Timestamp.now(tz="UTC"))])
+        print("[GPT Sheet] Saved.")
+    except Exception as e:
+        print(f"[GPT Sheet] Save error: {e}")
+
+
+def load_gpt_analysis() -> dict | None:
+    """Load GPT analysis from Google Sheets."""
+    try:
+        ws = _open_or_create_tab(GPT_TAB_NAME, ["key", "value"])
+        records = ws.get_all_records()
+        for row in records:
+            if row.get("key") == "gpt_analysis":
+                return json.loads(row["value"])
+        return None
+    except Exception as e:
+        print(f"[GPT Sheet] Load error: {e}")
+        return None
+
+
+# ══════════════════════════════════════════════════════════════
+# USER DATA — per-user persistent storage (scores, trade ideas)
 # ══════════════════════════════════════════════════════════════
 USER_TAB_NAME = "user_data"
 
+
 def _get_user_sheet():
     try:
-        creds_dict = dict(st.secrets["gcp_service_account"])
-        creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
-        gc = gspread.authorize(creds)
-        sh = gc.open(SHEET_NAME)
-        try:
-            return sh.worksheet(USER_TAB_NAME)
-        except gspread.WorksheetNotFound:
-            ws = sh.add_worksheet(title=USER_TAB_NAME, rows=500, cols=3)
-            ws.append_row(["username", "key", "value"])
-            return ws
+        return _open_or_create_tab(USER_TAB_NAME, ["username", "key", "value"])
     except Exception as e:
         print(f"[User Sheet] Connection error: {e}")
         return None
@@ -151,20 +172,15 @@ def _get_user_sheet():
 def save_user_data(username: str, key: str, value) -> None:
     """Save a JSON-serialisable value for a user."""
     try:
-        import json
         ws = _get_user_sheet()
         if ws is None:
             return
         records = ws.get_all_records()
-        # Find existing row and update, or append new
         for idx, row in enumerate(records, start=2):  # row 1 is header
             if row.get("username") == username and row.get("key") == key:
                 ws.update_cell(idx, 3, json.dumps(value))
-                print(f"[User Sheet] Updated {username}/{key}")
                 return
-        # Not found — append
         ws.append_row([username, key, json.dumps(value)])
-        print(f"[User Sheet] Saved {username}/{key}")
     except Exception as e:
         print(f"[User Sheet] Save error: {e}")
 
@@ -172,7 +188,6 @@ def save_user_data(username: str, key: str, value) -> None:
 def load_user_data(username: str, key: str):
     """Load a value for a user. Returns None if not found."""
     try:
-        import json
         ws = _get_user_sheet()
         if ws is None:
             return None
@@ -189,7 +204,6 @@ def load_user_data(username: str, key: str):
 def load_all_user_data(username: str) -> dict:
     """Load all saved data for a user as a dict."""
     try:
-        import json
         ws = _get_user_sheet()
         if ws is None:
             return {}
