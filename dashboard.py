@@ -2905,21 +2905,35 @@ Be specific with numbers. Use trading desk language. This person is trying to le
                 with st.spinner("Evaluating your answer..."):
                     try:
                         from gpt_layer import call_gpt_prose
-                        qa_prompt = f"""You are a managing director conducting an S&T interview at a top investment bank.
+                        qa_prompt = f"""You are an S&T MD at a bulge bracket bank in London conducting a first-round interview. You are asking market knowledge questions to test whether this candidate can think on their feet about economic data and market reactions.
 
-QUESTION ASKED: {st.session_state['quickfire_q']}
-
+QUESTION: {st.session_state['quickfire_q']}
 CANDIDATE'S ANSWER: {user_answer}
 
-Evaluate this answer as if you're in the interview room. Provide:
+You are assessing:
+- Did they get the direction of market moves right?
+- Did they give specific magnitudes (bps, %, not just "up" or "down")?
+- Did they cover multiple asset classes, not just one?
+- Did they explain the mechanism, not just the conclusion?
+- Would they sound credible saying this in a morning meeting?
 
-1. SCORE: X/10
-2. WHAT THEY GOT RIGHT (be specific)
-3. WHAT'S MISSING OR WRONG (be direct — what would make you mark them down?)
-4. THE IDEAL ANSWER in 3-4 sentences — what a strong candidate would say
-5. ONE FOLLOW-UP QUESTION you would ask next to probe deeper
+Respond in this EXACT format:
 
-Be tough but fair. This is a competitive process."""
+SCORE: X/10
+
+WHAT THEY GOT RIGHT:
+[Specific correct points they made — quote their words if possible]
+
+WHAT'S MISSING OR WRONG:
+[Specific errors or gaps — be direct. Did they miss an asset class? Get a direction wrong? Skip the mechanism?]
+
+THE IDEAL ANSWER:
+[What a sharp junior trader would say — include specific numbers (e.g. "10Y yields spike 8-12bps", "EUR/USD drops 40-60 pips", "Gold rallies on real rate compression"). Explain the mechanism clearly.]
+
+FOLLOW-UP QUESTION:
+[The next question you'd ask to probe deeper — make it a hard one]
+
+VERDICT: [Pass / Borderline / Fail — one sentence why]"""
 
                         feedback = call_gpt_prose(qa_prompt)
                         st.session_state["quickfire_answer"] = feedback or "Could not generate feedback."
@@ -3202,20 +3216,39 @@ with tabs[7]:
                     with st.spinner("Scoring your answer..."):
                         try:
                             from gpt_layer import call_gpt_prose
-                            prompt = f"""You are an MD interviewing for a {q['category']} role at a top investment bank.
+                            prompt = f"""You are a senior {q['category']} professional at Goldman Sachs or Morgan Stanley conducting a first-round interview. You have 15 years of experience and you are assessing whether this candidate thinks like a banker or trader.
 
-QUESTION: {q['q']}
-DIFFICULTY: {q['level']}
-CANDIDATE'S ANSWER: {answer}
+CONTEXT:
+- Role: {q['category']} at a bulge bracket bank in London
+- Question difficulty: {q['level']}
+- Question: {q['q']}
+- Candidate's answer: {answer}
 
-Score and evaluate this answer. Be direct and tough but fair — this is a competitive process.
+WHAT YOU'RE ASSESSING:
+- Technical accuracy (do they actually know the concept?)
+- Structure (did they give a clear, organised answer or ramble?)
+- Depth (did they go beyond the textbook definition?)
+- Market awareness (did they connect it to the real world?)
+- Confidence and precision (would you trust this person talking to a client?)
 
-Format your response EXACTLY as:
+Respond in this EXACT format — no extra text before or after:
+
 SCORE: X/10
-WHAT YOU GOT RIGHT: [1-2 sentences]
-WHAT'S MISSING OR WRONG: [1-2 sentences — be specific]
-IDEAL ANSWER: [3-4 sentences — what a top candidate would say]
-FOLLOW-UP: [One sharp follow-up question you'd ask next]"""
+
+WHAT YOU GOT RIGHT:
+[2-3 specific things they did well — reference their actual words]
+
+WHAT'S MISSING OR WRONG:
+[2-3 specific gaps or errors — be direct, this is what loses them the job]
+
+WHAT A TOP CANDIDATE WOULD SAY:
+[4-5 sentences — the answer that would make you want to hire them. Include a specific real-world example or number if relevant]
+
+FOLLOW-UP QUESTION:
+[The one probing question you'd ask next to see if they really understand it]
+
+VERDICT:
+[One honest sentence: hire / strong maybe / weak maybe / no — and why]"""
                             feedback = call_gpt_prose(prompt)
                             st.session_state["qf_feedback"] = feedback
                             # Extract score
@@ -3308,22 +3341,38 @@ FOLLOW-UP: [One sharp follow-up question you'd ask next]"""
                                 f"Q{i+1}: {a['q']}\nLevel: {a['level']}\nAnswer: {a['a']}"
                                 for i, a in enumerate(answers)
                             ])
-                            drill_prompt = f"""You are an MD reviewing a candidate's performance across a {prep_category} interview drill.
+                            drill_prompt = f"""You are a senior {prep_category} professional at a top investment bank in London, doing a post-interview debrief on a candidate who just answered 5 questions.
 
+CANDIDATE'S ANSWERS:
 {qa_text}
 
-Provide a comprehensive review:
+You are assessing: technical accuracy, depth of knowledge, real-world awareness, and communication clarity.
+
+Give a thorough debrief in this format:
 
 OVERALL SCORE: X/10
-SUMMARY: [2-3 sentences on overall performance]
 
-For each question, give:
-Q[N] SCORE: X/10 | VERDICT: [1 sentence] | WHAT TO ADD: [1 sentence]
+OVERALL ASSESSMENT:
+[3-4 sentences — honest overall impression. Would you pass them to the next round?]
 
-STRONGEST ANSWER: Q[N] — [why]
-WEAKEST ANSWER: Q[N] — [why and what the ideal answer would cover]
-KEY GAPS IN KNOWLEDGE: [2-3 specific topics to study]
-INTERVIEW READINESS: [One honest sentence — are they ready for a {prep_category} interview?]"""
+PER-QUESTION BREAKDOWN:
+Q1 — SCORE: X/10 | [One sentence verdict] | [One specific thing to improve]
+Q2 — SCORE: X/10 | [One sentence verdict] | [One specific thing to improve]
+Q3 — SCORE: X/10 | [One sentence verdict] | [One specific thing to improve]
+Q4 — SCORE: X/10 | [One sentence verdict] | [One specific thing to improve]
+Q5 — SCORE: X/10 | [One sentence verdict] | [One specific thing to improve]
+
+STRONGEST ANSWER: Q[N] — [Why this one stood out]
+
+WEAKEST ANSWER: Q[N] — [What was missing and the ideal answer in 2-3 sentences]
+
+KNOWLEDGE GAPS TO FIX:
+1. [Specific topic/concept to study with a suggested resource or focus area]
+2. [Specific topic/concept]
+3. [Specific topic/concept]
+
+INTERVIEW READINESS FOR {prep_category.upper()} AT A BULGE BRACKET:
+[Honest verdict — are they ready now, nearly ready, or do they need significant work? What is the single most important thing to fix before their interview?]"""
 
                             feedback = call_gpt_prose(drill_prompt)
                             st.session_state["drill_feedback"] = feedback
