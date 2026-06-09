@@ -95,19 +95,13 @@ def load_news():
         return None
 
 def load_gpt():
-    # 1. Session state (fastest — already in memory)
     if "gpt_analysis" in st.session_state:
         return st.session_state["gpt_analysis"]
-    # 2. Google Sheets (survives restarts and redeploys)
     try:
-        from sheets_db import load_gpt_analysis
-        data = load_gpt_analysis()
-        if data:
-            st.session_state["gpt_analysis"] = data  # cache in session
-            return data
-    except Exception as e:
-        print(f"[load_gpt] Sheets fallback error: {e}")
-    return None
+        with open("gpt_analysis.json", "r") as f:
+            return json.load(f)
+    except Exception:
+        return None
 
 # ---------- LOAD AI HYPE HISTORY ----------
 def load_ai_hype_history():
@@ -856,6 +850,20 @@ with tabs[0]:
     news_df = load_news()
     gpt = load_gpt()
     ai_hype_df = load_ai_hype_history()
+
+    # If no GPT analysis exists but we have headlines, generate it now from existing data
+    if gpt is None and news_df is not None and len(news_df) > 0:
+        try:
+            from gpt_layer import call_gpt
+            from sheets_db import save_gpt_analysis
+            headlines = news_df.sort_values("relevance", ascending=False)["headline"].head(5).tolist() if "relevance" in news_df.columns else news_df["headline"].head(5).tolist()
+            gpt_output = call_gpt([str(h) for h in headlines if h])
+            if gpt_output:
+                st.session_state["gpt_analysis"] = gpt_output
+                save_gpt_analysis(gpt_output)
+                gpt = gpt_output
+        except Exception as e:
+            print(f"[GPT fallback] {e}")
 
     col1, col2, col3, col4 = st.columns(4)
 
