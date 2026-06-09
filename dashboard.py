@@ -983,17 +983,15 @@ with tabs[0]:
                     date_str = str(row.get("date", ""))[:16]
 
                 # Clickable link if URL present
-                # Handle both missing column (NaN) and empty string
+                # Clickable link if URL present
                 url_clean = str(url).strip() if url and str(url) not in ["nan", "None", ""] else ""
                 if url_clean.startswith("http"):
-                    headline_html = (
-                        f'<a href="{url_clean}" target="_blank" ' +
-                        f'style="color:#00c3ff; text-decoration:none; font-weight:500;" ' +
-                        f'onmouseover="this.style.textDecoration='underline'" ' +
-                        f'onmouseout="this.style.textDecoration='none'">{headline} ↗</a>'
-                    )
+                    headline_html = ("<a href=\"" + url_clean + "\" target=\"_blank\" "
+                        "style=\"color:#00c3ff; text-decoration:none; font-weight:500;\">"
+                        + headline + " ↗</a>")
                 else:
-                    headline_html = f'<span style="color:#FFFFFF; font-weight:500;">{headline}</span>'
+                    headline_html = "<span style=\"color:#FFFFFF; font-weight:500;\">" + headline + "</span>"
+
 
                 st.markdown(
                     f'<div style="padding:7px 0; border-bottom:1px solid #222;">' +
