@@ -958,13 +958,23 @@ with tabs[0]:
     with bottom_left:
         st.markdown("### Latest Headlines")
         if news_df is not None and len(news_df) > 0:
-            table = news_df.sort_values("date", ascending=False).head(25)
-            for _, row in table.iterrows():
+            all_headlines = news_df.sort_values("date", ascending=False).head(25)
+
+            # Show top 5 by default, expand on button click
+            if "show_all_headlines" not in st.session_state:
+                st.session_state["show_all_headlines"] = False
+
+            table = all_headlines if st.session_state["show_all_headlines"] else all_headlines.head(5)
+
+            def _render_headline(row):
                 headline = str(row.get("headline", ""))
                 source   = str(row.get("source", ""))
                 url      = str(row.get("url", ""))
                 topic    = str(row.get("topic", "other"))
-                sentiment_val = float(row.get("sentiment", 0))
+                try:
+                    sentiment_val = float(row.get("sentiment", 0))
+                except Exception:
+                    sentiment_val = 0.0
                 sent_color = "#00ff88" if sentiment_val > 0.05 else "#ff4d4d" if sentiment_val < -0.05 else "#FFDC00"
                 sent_str   = f"{sentiment_val:+.2f}"
                 try:
@@ -972,24 +982,41 @@ with tabs[0]:
                 except Exception:
                     date_str = str(row.get("date", ""))[:16]
 
-                # Render as clickable link if URL available
-                if url and url.startswith("http"):
-                    headline_html = f"<a href=\"{url}\" target=\"_blank\" style=\"color:#FFFFFF; text-decoration:none; font-weight:500;\">{headline}</a>"
-                    link_icon = "🔗 "
+                # Clickable link if URL present
+                if url and str(url).startswith("http"):
+                    headline_html = (
+                        f'<a href="{url}" target="_blank" ' +
+                        f'style="color:#FFFFFF; text-decoration:underline; ' +
+                        f'text-decoration-color:#555; font-weight:500; ' +
+                        f'text-underline-offset:3px;">{headline}</a>'
+                    )
                 else:
-                    headline_html = f"<span style=\"color:#FFFFFF; font-weight:500;\">{headline}</span>"
-                    link_icon = ""
+                    headline_html = f'<span style="color:#FFFFFF; font-weight:500;">{headline}</span>'
 
                 st.markdown(
-                    f"<div style=\"padding:6px 0; border-bottom:1px solid #222;\">"
-                    f"<div>{link_icon}{headline_html}</div>"
-                    f"<div style=\"font-size:11px; color:#888; margin-top:2px;\">"
-                    f"{date_str} &nbsp;|&nbsp; {source} &nbsp;|&nbsp; "
-                    f"<span style=\"color:{sent_color};\">{sent_str}</span> sentiment &nbsp;|&nbsp; {topic}"
-                    f"</div>"
-                    f"</div>",
+                    f'<div style="padding:7px 0; border-bottom:1px solid #222;">' +
+                    f'<div>{headline_html}</div>' +
+                    f'<div style="font-size:11px; color:#888; margin-top:2px;">' +
+                    f'{date_str} &nbsp;|&nbsp; {source} &nbsp;|&nbsp; ' +
+                    f'<span style="color:{sent_color};">{sent_str}</span> sentiment &nbsp;|&nbsp; {topic}' +
+                    f'</div></div>',
                     unsafe_allow_html=True
                 )
+
+            for _, row in table.iterrows():
+                _render_headline(row)
+
+            # Show more / show less toggle
+            total = len(all_headlines)
+            if total > 5:
+                if st.session_state["show_all_headlines"]:
+                    if st.button(f"▲ Show less", key="headlines_toggle"):
+                        st.session_state["show_all_headlines"] = False
+                        st.rerun()
+                else:
+                    if st.button(f"▼ Show all {total} headlines", key="headlines_toggle"):
+                        st.session_state["show_all_headlines"] = True
+                        st.rerun()
         else:
             st.markdown("<p style='color:#AAAAAA;'>No news data available yet.</p>", unsafe_allow_html=True)
 
