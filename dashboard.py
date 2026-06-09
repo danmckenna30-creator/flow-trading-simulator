@@ -706,7 +706,7 @@ To reduce inventory risk, you hedge — placing an offsetting trade in the marke
 
 
 # ---------- TABS INITIALIZATION ----------
-tabs = st.tabs(["Macro", "Risk", "Commodities", "S&P500", "Flow Trading", "Trade Ideas", "Econ Calendar"])
+tabs = st.tabs(["Macro", "Risk", "Commodities", "S&P500", "Flow Trading", "Trade Ideas", "Econ Calendar", "Interview Prep"])
 
 # ---------- LOAD MARKET DATA ----------
 prices = get_market_data()
@@ -2963,4 +2963,478 @@ Be tough but fair. This is a competitive process."""
     if st.session_state.get(tab_chat_key_ec):
         if st.button("🗑️ Clear chat", key="clear_chat_Econ Calendar"):
             st.session_state[tab_chat_key_ec] = []
+            st.rerun()
+
+# ══════════════════════════════════════════════════════════════
+# TAB 7 — INTERVIEW PREP
+# ══════════════════════════════════════════════════════════════
+with tabs[7]:
+    import random as _random
+
+    st.markdown("## 🎓 Interview Prep")
+    st.caption("Practice the questions that actually come up in S&T, IBD, and markets interviews. Choose your level, pick a mode, and get scored by GPT like a real interviewer would.")
+    st.markdown("---")
+
+    # ══════════════════════════════════════════════════════════
+    # QUESTION BANK
+    # ══════════════════════════════════════════════════════════
+    QUESTION_BANK = {
+
+        # ── S&T ──────────────────────────────────────────────
+        "S&T": {
+            "Beginner": [
+                {"q": "What is a market maker and how do they make money?", "hint": "Think about bid/offer spreads and inventory risk."},
+                {"q": "What is the difference between a broker and a dealer?", "hint": "One acts as agent, one acts as principal."},
+                {"q": "What does 'going long' and 'going short' mean?", "hint": "Think about your expectation of price direction."},
+                {"q": "What is the VIX and why do traders watch it?", "hint": "It measures implied volatility of S&P 500 options."},
+                {"q": "Explain the difference between equities and bonds in one sentence.", "hint": "Think about ownership vs lending."},
+                {"q": "What is a bid-offer spread and why does it exist?", "hint": "Compensation for providing liquidity and taking risk."},
+                {"q": "Why would a company issue bonds instead of equity?", "hint": "Think about cost of capital and dilution."},
+                {"q": "What does it mean to hedge a position?", "hint": "Reducing risk by taking an offsetting position."},
+                {"q": "What is a futures contract?", "hint": "An agreement to buy or sell an asset at a future date and price."},
+                {"q": "What is the difference between a primary and secondary market?", "hint": "Where securities are first issued vs where they are traded afterwards."},
+            ],
+            "Intermediate": [
+                {"q": "Walk me through how a flow trader manages inventory risk after a large client trade.", "hint": "Think about hedging, timing, slippage, and market impact."},
+                {"q": "What is the 2s10s spread and what does it tell you about the economy?", "hint": "Difference between 2Y and 10Y yields — shape of the curve matters."},
+                {"q": "A client wants to buy $50m of S&P 500. You quote them. What risks are you taking on?", "hint": "Inventory, market impact, timing, delta risk."},
+                {"q": "Explain how a repo transaction works.", "hint": "Short-term borrowing using securities as collateral."},
+                {"q": "What is toxic flow and why does it cause losses for market makers?", "hint": "Informed clients who trade ahead of a price move."},
+                {"q": "What happens to bond prices when interest rates rise?", "hint": "Inverse relationship — duration tells you how much."},
+                {"q": "What is duration and why does it matter for a rates trader?", "hint": "Sensitivity of bond price to changes in yield."},
+                {"q": "Explain the carry trade in FX markets.", "hint": "Borrow in low-rate currency, invest in high-rate currency."},
+                {"q": "What is a credit default swap (CDS) and who uses them?", "hint": "Insurance against credit default — used to hedge or speculate."},
+                {"q": "How does market impact affect a large hedge execution?", "hint": "Your own trade moves the market against you."},
+            ],
+            "Advanced": [
+                {"q": "Explain delta-gamma hedging and when gamma becomes dangerous.", "hint": "Think about convexity and large moves near expiry."},
+                {"q": "What is the vol surface and why isn't it flat?", "hint": "Implied vol varies by strike and expiry — skew and term structure."},
+                {"q": "How would you price a variance swap and why would a client want one?", "hint": "Payoff based on realised vs implied variance."},
+                {"q": "Walk me through the risks of being short gamma heading into a major data release.", "hint": "Large moves hurt you — think about vega, gamma, theta trade-offs."},
+                {"q": "What is a synthetic CDO and how did it contribute to the 2008 crisis?", "hint": "Tranched exposure to credit risk via CDS — correlation assumptions broke down."},
+                {"q": "Explain the difference between historical VaR and parametric VaR. Which do you prefer?", "hint": "Fat tails, normality assumptions, look-back periods."},
+                {"q": "What is basis risk and give a real trading example where it caused a large loss.", "hint": "When your hedge doesn't perfectly offset your position — think Metallgesellschaft or LTCM."},
+                {"q": "How would you structure a trade to profit from a steepening yield curve?", "hint": "Long the short end, short the long end — or use swaps."},
+                {"q": "What is the difference between DV01 and duration?", "hint": "DV01 is dollar value of 1bp move — duration is percentage sensitivity."},
+                {"q": "Explain how a central bank's quantitative easing programme affects FX markets.", "hint": "Money supply, real yields, capital flows, carry dynamics."},
+            ],
+        },
+
+        # ── IBD ──────────────────────────────────────────────
+        "IBD": {
+            "Beginner": [
+                {"q": "What is investment banking and how does it differ from commercial banking?", "hint": "Capital markets, advisory vs lending and deposits."},
+                {"q": "What is an IPO and why would a company pursue one?", "hint": "First sale of shares to the public — access to capital, liquidity for founders."},
+                {"q": "What are the three main valuation methodologies?", "hint": "DCF, comparable companies, precedent transactions."},
+                {"q": "What does EBITDA stand for and why do bankers use it?", "hint": "Earnings before interest, tax, depreciation, amortisation — proxy for operating cash flow."},
+                {"q": "What is the difference between enterprise value and equity value?", "hint": "EV includes debt; equity value is what shareholders own."},
+                {"q": "What is a merger vs an acquisition?", "hint": "Merger = two companies combining as equals. Acquisition = one buys the other."},
+                {"q": "What is leveraged buyout (LBO)?", "hint": "Acquisition using mostly debt — PE firms buy companies this way."},
+                {"q": "What is a pitch book?", "hint": "A presentation bankers prepare to win mandates or present ideas to clients."},
+                {"q": "What does 'accretive' mean in the context of M&A?", "hint": "The deal increases acquirer's EPS after completion."},
+                {"q": "What is a fairness opinion?", "hint": "Independent assessment that the terms of a transaction are fair — typically required by a board."},
+            ],
+            "Intermediate": [
+                {"q": "Walk me through a DCF valuation step by step.", "hint": "Project FCF, choose discount rate (WACC), terminal value, discount back to present."},
+                {"q": "What is WACC and how do you calculate it?", "hint": "Weighted average of cost of equity and after-tax cost of debt."},
+                {"q": "Why might two comparable companies trade at different EV/EBITDA multiples?", "hint": "Growth rate, margins, capex intensity, leverage, management quality."},
+                {"q": "How does increasing leverage affect a company's WACC?", "hint": "Cheaper debt reduces WACC but increases equity risk — think Modigliani-Miller."},
+                {"q": "What are synergies in M&A and how do you value them?", "hint": "Revenue synergies and cost synergies — be sceptical, they're often overstated."},
+                {"q": "Walk me through how an LBO model works.", "hint": "Entry, financing structure, operating model, exit multiple, returns to PE sponsor."},
+                {"q": "What is a convertible bond and why would a company issue one?", "hint": "Bond that converts to equity — lower coupon in exchange for upside optionality."},
+                {"q": "What is the difference between a strategic buyer and a financial buyer in M&A?", "hint": "Strategic = industry player seeking synergies. Financial = PE firm seeking returns."},
+                {"q": "How do you determine the appropriate discount rate for a DCF?", "hint": "WACC — cost of equity via CAPM plus after-tax cost of debt, weighted by capital structure."},
+                {"q": "What happens to a company's share price if it announces an all-cash acquisition?", "hint": "Usually falls slightly on dilution fears / premium paid — unless market thinks it's transformative."},
+            ],
+            "Advanced": [
+                {"q": "How does the treatment of deferred tax liabilities affect enterprise value in an acquisition?", "hint": "Acquirer inherits DTLs — they reduce equity value in a purchase price allocation."},
+                {"q": "Explain how a cross-border M&A deal creates additional complexity vs a domestic deal.", "hint": "FX risk, regulatory approvals, cultural integration, tax structuring, repatriation issues."},
+                {"q": "What is a poison pill and when would a board deploy one?", "hint": "Shareholder rights plan to dilute hostile acquirer — buys time for negotiation or white knight."},
+                {"q": "Walk me through the tax implications of a stock deal vs a cash deal for the target's shareholders.", "hint": "Cash = immediate capital gains tax. Stock = tax-deferred until shares are sold."},
+                {"q": "How would you advise a client on whether to pursue a hostile takeover vs a friendly approach?", "hint": "Cost, timeline, regulatory risk, board reaction, alternative uses of capital."},
+                {"q": "What is NAV analysis and when is it more appropriate than a DCF or comps?", "hint": "Asset-heavy industries like real estate, mining — value the assets directly."},
+                {"q": "Explain the concept of normalised earnings and when you would adjust EBITDA.", "hint": "Remove one-off items, restructuring charges, stock comp — to get sustainable earnings power."},
+                {"q": "What is a reverse merger and what are its advantages for a private company?", "hint": "Private company merges with a listed shell — faster and cheaper than a full IPO."},
+                {"q": "How does a rights issue affect existing shareholders and why might the market react negatively?", "hint": "Dilution — signals management thinks shares are overvalued or company needs cash urgently."},
+                {"q": "What is the impact of goodwill impairment on financial statements?", "hint": "Non-cash charge — reduces net income and equity, but no cash flow or tax impact."},
+            ],
+        },
+
+        # ── Markets ───────────────────────────────────────────
+        "Markets": {
+            "Beginner": [
+                {"q": "What is inflation and why do central banks target 2%?", "hint": "Too high = purchasing power erodes. Too low = deflation risk. 2% gives room to cut rates."},
+                {"q": "What is a central bank and what tools does it have?", "hint": "Sets interest rates, controls money supply, lender of last resort."},
+                {"q": "Explain the relationship between interest rates and the economy.", "hint": "Higher rates = more expensive to borrow = slower growth = lower inflation."},
+                {"q": "What is GDP and what does it measure?", "hint": "Total value of goods and services produced in an economy over a period."},
+                {"q": "What is a recession?", "hint": "Two consecutive quarters of negative GDP growth — technically. But feels different in practice."},
+                {"q": "Why does the dollar strengthen when risk-off sentiment increases?", "hint": "USD is the world's reserve currency — safe haven demand drives flows into USD assets."},
+                {"q": "What is quantitative easing (QE)?", "hint": "Central bank buys bonds to inject money into the economy and push down long-term rates."},
+                {"q": "What is the difference between fiscal policy and monetary policy?", "hint": "Fiscal = government spending/taxes. Monetary = central bank setting rates."},
+                {"q": "Why do oil prices affect inflation?", "hint": "Energy is an input to almost everything — transport, manufacturing, heating."},
+                {"q": "What is a yield and how is it different from a coupon?", "hint": "Coupon is fixed. Yield changes with price — they move inversely."},
+            ],
+            "Intermediate": [
+                {"q": "How does the Fed's dual mandate create tension in policy decisions?", "hint": "Maximise employment AND stable prices — they often conflict, especially with supply shocks."},
+                {"q": "Explain the transmission mechanism of monetary policy.", "hint": "Rate change → bank lending costs → corporate investment → consumer spending → inflation."},
+                {"q": "What is the difference between headline CPI and core CPI and which matters more?", "hint": "Core strips out food and energy — less volatile, better indicator of underlying inflation."},
+                {"q": "How do currency wars start and what are their consequences?", "hint": "Competitive devaluation — each country tries to weaken its currency to boost exports."},
+                {"q": "What is the 'Greenspan put' and has it changed how markets behave?", "hint": "Belief the Fed will cut rates whenever markets fall — moral hazard, risk-taking encouraged."},
+                {"q": "Why does copper sometimes act as a leading economic indicator?", "hint": "Used in construction, manufacturing, electronics — high demand signals growth. 'Dr Copper.'"},
+                {"q": "What is the carry trade and what causes it to unwind violently?", "hint": "Borrow cheap, invest in high yield — unwinds when risk-off hits and funding dries up. Yen 2024."},
+                {"q": "Explain how a strong dollar affects emerging markets.", "hint": "Dollar-denominated debt becomes more expensive, capital flows out, currencies weaken."},
+                {"q": "What caused the 2023 UK gilt crisis and what does it tell us about fiscal credibility?", "hint": "Kwasi Kwarteng mini-budget — unfunded tax cuts spooked bond markets, LDI funds blow-up."},
+                {"q": "What is the difference between a soft landing and a hard landing?", "hint": "Soft = inflation controlled without recession. Hard = recession required to break inflation."},
+            ],
+            "Advanced": [
+                {"q": "Explain the mechanics of the 2008 financial crisis from mortgage origination to systemic collapse.", "hint": "Subprime → securitisation → CDO → AIG → interbank freeze → Lehman → government bailouts."},
+                {"q": "What is the Fisher equation and how does it explain real vs nominal rates?", "hint": "Nominal rate = real rate + expected inflation. Real rates drive investment decisions."},
+                {"q": "How does forward guidance work and what are its limitations?", "hint": "Central bank commits to future policy path — shapes expectations but credibility can be lost."},
+                {"q": "What is secular stagnation and is it still a relevant concept post-COVID?", "hint": "Summers thesis — structurally low r* due to demographics and savings glut. COVID changed some assumptions."},
+                {"q": "Explain the impossible trinity in international economics.", "hint": "Can't have fixed exchange rate, free capital flows, AND independent monetary policy simultaneously."},
+                {"q": "How did the Bank of Japan's yield curve control policy affect global bond markets?", "hint": "Suppressed JGB yields globally, carry trade funding, eventual unwind caused yen squeeze."},
+                {"q": "What is the neutral rate of interest (r*) and why does disagreement about it matter?", "hint": "The rate that neither stimulates nor restricts — if you don't know r* you don't know if policy is tight."},
+                {"q": "Explain how a sovereign debt crisis develops and what the IMF's role is.", "hint": "Loss of market access → currency collapse → austerity demands → IMF conditionality → political instability."},
+                {"q": "How does the repo market connect monetary policy to broader financial conditions?", "hint": "Overnight funding rate, collateral chains, Fed facilities — September 2019 repo spike as example."},
+                {"q": "What is reflexivity in markets as described by George Soros and give a real example.", "hint": "Market prices affect fundamentals which affect prices — self-reinforcing loops. GBP 1992 or TMT bubble."},
+            ],
+        },
+    }
+
+    # Flatten all questions for quick fire
+    ALL_QUESTIONS = []
+    for category, levels in QUESTION_BANK.items():
+        for level, qs in levels.items():
+            for q in qs:
+                ALL_QUESTIONS.append({**q, "category": category, "level": level})
+
+    # ── PROGRESS TRACKER ─────────────────────────────────────
+    if "prep_scores" not in st.session_state:
+        st.session_state["prep_scores"] = []
+
+    scores = st.session_state["prep_scores"]
+    if scores:
+        total  = len(scores)
+        avg    = round(sum(s["score"] for s in scores) / total, 1)
+        by_cat = {}
+        for s in scores:
+            by_cat.setdefault(s["category"], []).append(s["score"])
+
+        st.markdown("### 📊 Your Progress")
+        pc1, pc2, pc3, pc4 = st.columns(4)
+        with pc1:
+            st.markdown(f"<div class='card'><div class='label'>Questions Answered</div><div class='big-number'>{total}</div></div>", unsafe_allow_html=True)
+        with pc2:
+            avg_color = "#00ff88" if avg >= 7 else "#FFDC00" if avg >= 5 else "#ff4d4d"
+            st.markdown(f"<div class='card'><div class='label'>Average Score</div><div class='big-number' style='color:{avg_color};'>{avg}/10</div></div>", unsafe_allow_html=True)
+        with pc3:
+            best_cat = max(by_cat, key=lambda c: sum(by_cat[c])/len(by_cat[c])) if by_cat else "—"
+            st.markdown(f"<div class='card'><div class='label'>Strongest Area</div><div class='big-number' style='font-size:20px;'>{best_cat}</div></div>", unsafe_allow_html=True)
+        with pc4:
+            weak_cat = min(by_cat, key=lambda c: sum(by_cat[c])/len(by_cat[c])) if by_cat else "—"
+            st.markdown(f"<div class='card'><div class='label'>Weakest Area</div><div class='big-number' style='font-size:20px; color:#FFDC00;'>{weak_cat}</div></div>", unsafe_allow_html=True)
+
+        if st.button("🗑️ Reset Progress", key="reset_prep"):
+            st.session_state["prep_scores"] = []
+            st.rerun()
+        st.markdown("---")
+
+    # ── MODE SELECTOR ─────────────────────────────────────────
+    st.markdown("### ⚙️ Settings")
+    set1, set2, set3 = st.columns(3)
+    with set1:
+        prep_mode = st.radio("Mode", ["⚡ Quick Fire", "📚 Topic Drill"], horizontal=True, key="prep_mode")
+    with set2:
+        prep_level = st.selectbox("Difficulty", ["Beginner", "Intermediate", "Advanced", "Mixed"], key="prep_level")
+    with set3:
+        if prep_mode == "📚 Topic Drill":
+            prep_category = st.selectbox("Category", ["S&T", "IBD", "Markets"], key="prep_category")
+        else:
+            prep_category = st.selectbox("Category", ["All", "S&T", "IBD", "Markets"], key="prep_category_qf")
+
+    st.markdown("---")
+
+    # ══════════════════════════════════════════════════════════
+    # MODE 1: QUICK FIRE
+    # ══════════════════════════════════════════════════════════
+    if prep_mode == "⚡ Quick Fire":
+        st.markdown("### ⚡ Quick Fire")
+        st.caption("One question at a time. Answer it, get scored, move on. Simulates the real interview pace.")
+
+        if st.button("🎲 Get Question", key="qf_new_btn", type="primary"):
+            # Filter by level and category
+            pool = ALL_QUESTIONS.copy()
+            if prep_level != "Mixed":
+                pool = [q for q in pool if q["level"] == prep_level]
+            if prep_category != "All":
+                pool = [q for q in pool if q["category"] == prep_category]
+            if pool:
+                st.session_state["qf_question"] = _random.choice(pool)
+                st.session_state.pop("qf_feedback", None)
+                st.session_state.pop("qf_user_answer", None)
+            else:
+                st.warning("No questions match your filters.")
+
+        if "qf_question" in st.session_state:
+            q = st.session_state["qf_question"]
+            level_colors = {"Beginner": "#00ff88", "Intermediate": "#FFDC00", "Advanced": "#ff4d4d"}
+            lc = level_colors.get(q["level"], "#fff")
+
+            st.markdown(
+                f"<div class='card' style='border-left:4px solid {lc};'>"
+                f"<div style='font-size:11px; color:#888; margin-bottom:6px;'>{q['category']} | "
+                f"<span style='color:{lc};'>{q['level']}</span></div>"
+                f"<div style='font-size:18px; font-weight:bold; color:#FFFFFF;'>❓ {q['q']}</div>"
+                f"</div>",
+                unsafe_allow_html=True
+            )
+
+            with st.expander("💡 Hint", expanded=False):
+                st.markdown(f"*{q['hint']}*")
+
+            answer = st.text_area("Your answer:", height=120, key=f"qf_ans_{q['q'][:20]}",
+                                  placeholder="Answer as you would in an interview room — be specific and structured.")
+
+            if st.button("✅ Submit for Feedback", key="qf_submit"):
+                if not answer.strip():
+                    st.warning("Write your answer first.")
+                else:
+                    with st.spinner("Scoring your answer..."):
+                        try:
+                            from gpt_layer import call_gpt_prose
+                            prompt = f"""You are an MD interviewing for a {q['category']} role at a top investment bank.
+
+QUESTION: {q['q']}
+DIFFICULTY: {q['level']}
+CANDIDATE'S ANSWER: {answer}
+
+Score and evaluate this answer. Be direct and tough but fair — this is a competitive process.
+
+Format your response EXACTLY as:
+SCORE: X/10
+WHAT YOU GOT RIGHT: [1-2 sentences]
+WHAT'S MISSING OR WRONG: [1-2 sentences — be specific]
+IDEAL ANSWER: [3-4 sentences — what a top candidate would say]
+FOLLOW-UP: [One sharp follow-up question you'd ask next]"""
+                            feedback = call_gpt_prose(prompt)
+                            st.session_state["qf_feedback"] = feedback
+                            # Extract score
+                            try:
+                                score_line = [l for l in feedback.split("\n") if l.startswith("SCORE:")][0]
+                                score = int(score_line.split(":")[1].strip().split("/")[0])
+                            except Exception:
+                                score = 5
+                            st.session_state["prep_scores"].append({
+                                "category": q["category"], "level": q["level"],
+                                "question": q["q"][:60], "score": score
+                            })
+                        except Exception as e:
+                            st.session_state["qf_feedback"] = f"Error: {e}"
+
+            if "qf_feedback" in st.session_state:
+                st.markdown(f"<div class='card' style='line-height:1.8; white-space:pre-wrap; color:#DDDDDD;'>{st.session_state['qf_feedback']}</div>", unsafe_allow_html=True)
+
+    # ══════════════════════════════════════════════════════════
+    # MODE 2: TOPIC DRILL
+    # ══════════════════════════════════════════════════════════
+    else:
+        st.markdown(f"### 📚 Topic Drill — {prep_category}")
+        st.caption("5 questions on your chosen topic and level, one after another. Builds depth and pattern recognition.")
+
+        if st.button("🚀 Start Drill", key="drill_start", type="primary"):
+            pool = QUESTION_BANK[prep_category].get(prep_level if prep_level != "Mixed" else "Intermediate", [])
+            if prep_level == "Mixed":
+                pool = []
+                for lvl in ["Beginner", "Intermediate", "Advanced"]:
+                    pool += QUESTION_BANK[prep_category].get(lvl, [])
+                pool = [{**q, "level": lvl}
+                        for lvl in ["Beginner", "Intermediate", "Advanced"]
+                        for q in QUESTION_BANK[prep_category].get(lvl, [])]
+            else:
+                pool = [{**q, "level": prep_level} for q in pool]
+
+            selected = _random.sample(pool, min(5, len(pool)))
+            st.session_state["drill_questions"] = selected
+            st.session_state["drill_index"]     = 0
+            st.session_state["drill_answers"]   = []
+            st.session_state.pop("drill_feedback", None)
+
+        if "drill_questions" in st.session_state:
+            questions  = st.session_state["drill_questions"]
+            idx        = st.session_state.get("drill_index", 0)
+            answers    = st.session_state.get("drill_answers", [])
+
+            if idx < len(questions):
+                q = questions[idx]
+                level_colors = {"Beginner": "#00ff88", "Intermediate": "#FFDC00", "Advanced": "#ff4d4d"}
+                lc = level_colors.get(q.get("level",""), "#fff")
+
+                st.markdown(f"**Question {idx+1} of {len(questions)}**")
+                st.progress((idx) / len(questions))
+
+                st.markdown(
+                    f"<div class='card' style='border-left:4px solid {lc};'>"
+                    f"<div style='font-size:11px; color:#888;'>{prep_category} | <span style='color:{lc};'>{q.get('level','')}</span></div>"
+                    f"<div style='font-size:18px; font-weight:bold; color:#FFFFFF; margin-top:4px;'>❓ {q['q']}</div>"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
+
+                with st.expander("💡 Hint", expanded=False):
+                    st.markdown(f"*{q['hint']}*")
+
+                drill_ans = st.text_area("Your answer:", height=120, key=f"drill_ans_{idx}",
+                                         placeholder="Be specific. Structure your answer: definition → mechanism → example.")
+
+                if st.button("➡️ Submit & Next", key=f"drill_next_{idx}"):
+                    if not drill_ans.strip():
+                        st.warning("Please write an answer first.")
+                    else:
+                        answers.append({"q": q["q"], "a": drill_ans, "level": q.get("level",""), "hint": q["hint"]})
+                        st.session_state["drill_answers"] = answers
+                        st.session_state["drill_index"]   = idx + 1
+                        st.rerun()
+
+            else:
+                # All questions answered — get full drill review
+                st.success(f"✅ Drill complete! {len(answers)} questions answered.")
+                st.markdown("---")
+
+                if st.button("🤖 Get Full Drill Feedback", key="drill_feedback_btn", type="primary"):
+                    with st.spinner("Reviewing all your answers..."):
+                        try:
+                            from gpt_layer import call_gpt_prose
+                            qa_text = "\n\n".join([
+                                f"Q{i+1}: {a['q']}\nLevel: {a['level']}\nAnswer: {a['a']}"
+                                for i, a in enumerate(answers)
+                            ])
+                            drill_prompt = f"""You are an MD reviewing a candidate's performance across a {prep_category} interview drill.
+
+{qa_text}
+
+Provide a comprehensive review:
+
+OVERALL SCORE: X/10
+SUMMARY: [2-3 sentences on overall performance]
+
+For each question, give:
+Q[N] SCORE: X/10 | VERDICT: [1 sentence] | WHAT TO ADD: [1 sentence]
+
+STRONGEST ANSWER: Q[N] — [why]
+WEAKEST ANSWER: Q[N] — [why and what the ideal answer would cover]
+KEY GAPS IN KNOWLEDGE: [2-3 specific topics to study]
+INTERVIEW READINESS: [One honest sentence — are they ready for a {prep_category} interview?]"""
+
+                            feedback = call_gpt_prose(drill_prompt)
+                            st.session_state["drill_feedback"] = feedback
+                            try:
+                                score_line = [l for l in feedback.split("\n") if "OVERALL SCORE:" in l][0]
+                                score = int(score_line.split(":")[1].strip().split("/")[0])
+                            except Exception:
+                                score = 5
+                            for a in answers:
+                                st.session_state["prep_scores"].append({
+                                    "category": prep_category, "level": a["level"],
+                                    "question": a["q"][:60], "score": score
+                                })
+                        except Exception as e:
+                            st.session_state["drill_feedback"] = f"Error: {e}"
+
+                if "drill_feedback" in st.session_state:
+                    st.markdown(f"<div class='card' style='line-height:1.8; white-space:pre-wrap; color:#DDDDDD;'>{st.session_state['drill_feedback']}</div>", unsafe_allow_html=True)
+
+                if st.button("🔄 Start New Drill", key="drill_restart"):
+                    for k in ["drill_questions","drill_index","drill_answers","drill_feedback"]:
+                        st.session_state.pop(k, None)
+                    st.rerun()
+
+    st.markdown("---")
+
+    # ── REFERENCE GUIDES ─────────────────────────────────────
+    st.markdown("### 📖 Quick Reference Guides")
+    st.caption("Key concepts you need to know cold before any S&T or IBD interview.")
+
+    with st.expander("🏦 S&T — What Interviewers Always Ask", expanded=False):
+        st.markdown("""
+**The non-negotiables for S&T interviews:**
+- **Your trade idea** — always have one ready. Asset, direction, entry, target, stop, catalyst, time horizon.
+- **The yield curve** — know the 4 shapes, what each means, and the current shape.
+- **Risk-on vs risk-off** — be able to name 3 assets that move in each regime and why.
+- **A recent market event** — pick one from the last month and explain the cross-asset impact.
+- **Flow trading mechanics** — bid/offer spread, inventory risk, hedging, toxic flow.
+- **VIX** — what it is, what levels mean, and how traders use it.
+- **One macro view** — "I think X because Y, and the trade is Z."
+
+**Questions that trip people up:**
+- "If the Fed cuts by 25bps, what happens to gold, the dollar, and 2-year yields — and in what order?"
+- "Walk me through what happens to your book if a client sells you $100m of S&P 500."
+- "What's the difference between vol and realised vol, and why does it matter?"
+        """)
+
+    with st.expander("📊 IBD — Technical Questions You Must Know", expanded=False):
+        st.markdown("""
+**The absolute minimum for IBD interviews:**
+- **Walk me through a DCF** — know every step cold. Project FCF → WACC → terminal value → discount.
+- **Three statements** — how do they link? Net income flows to retained earnings and cash flow statement.
+- **What makes a good acquisition target?** — Strong FCF, fragmented market, synergy potential, reasonable price.
+- **EV vs Equity Value** — know when to use each and how to bridge between them.
+- **Dilution/accretion analysis** — can you work out if a deal is accretive in your head?
+
+**Common technical traps:**
+- "If depreciation increases by \$10, what happens to the three statements?"
+- "Why can two companies with the same EBITDA trade at different multiples?"
+- "What happens to EV if you issue new shares?"
+        """)
+
+    with st.expander("🌍 Markets — Macro Concepts You Need Cold", expanded=False):
+        st.markdown("""
+**What every markets candidate must know:**
+- **Monetary policy transmission** — how does a rate hike actually slow inflation? Walk through the chain.
+- **The Fed's dual mandate** — maximum employment AND price stability. Know the tension between them.
+- **Safe haven assets** — gold, USD, JPY, US Treasuries. Know why each is a safe haven and when they diverge.
+- **Oil and the economy** — why oil is an input to everything and how oil shocks cause recessions.
+- **The carry trade** — borrow in JPY, invest in high-yield currencies. Know what causes violent unwinds.
+
+**Always read before an interview:**
+- What did the Fed/BoE/ECB say at their last meeting?
+- What is the current state of inflation in the US and UK?
+- What is the 2s10s spread today and is the curve inverted?
+- What happened to markets last week and why?
+        """)
+
+    # ── TAB CHAT ─────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("### 💬 Ask the Interview Coach")
+    st.caption("Ask anything about interview prep, finance concepts, or how to answer specific questions.")
+
+    _tab_ip = "Interview Prep"
+    tab_chat_key_ip = f"chat_history_{_tab_ip}"
+    if tab_chat_key_ip not in st.session_state:
+        st.session_state[tab_chat_key_ip] = []
+
+    for msg in st.session_state[tab_chat_key_ip]:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    if _qip := st.chat_input("Ask about finance concepts, interview technique, or how to structure an answer...", key="chat_input_Interview Prep"):
+        st.session_state[tab_chat_key_ip].append({"role": "user", "content": _qip})
+        with st.chat_message("user"):
+            st.markdown(_qip)
+        _sys_ip = """You are an expert IB interview coach helping someone break into S&T and IBD at a top investment bank in London.
+Answer finance and interview questions clearly and directly. Explain concepts like a senior banker would to a junior — precise, no fluff.
+For interview technique questions, give specific, actionable advice."""
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                try:
+                    from gpt_layer import call_gpt_prose
+                    _r = call_gpt_prose(f"{_sys_ip}\n\nQuestion: {_qip}")
+                    if _r:
+                        st.markdown(_r)
+                        st.session_state[tab_chat_key_ip].append({"role": "assistant", "content": _r})
+                except Exception as e:
+                    st.markdown(f"Error: {e}")
+
+    if st.session_state.get(tab_chat_key_ip):
+        if st.button("🗑️ Clear chat", key="clear_chat_Interview Prep"):
+            st.session_state[tab_chat_key_ip] = []
             st.rerun()
