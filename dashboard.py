@@ -969,39 +969,38 @@ with tabs[0]:
             def _render_headline(row):
                 headline = str(row.get("headline", ""))
                 source   = str(row.get("source", ""))
-                url      = str(row.get("url", ""))
+                raw_url  = row.get("url", "")
                 topic    = str(row.get("topic", "other"))
                 try:
                     sentiment_val = float(row.get("sentiment", 0))
                 except Exception:
                     sentiment_val = 0.0
                 sent_color = "#00ff88" if sentiment_val > 0.05 else "#ff4d4d" if sentiment_val < -0.05 else "#FFDC00"
-                sent_str   = f"{sentiment_val:+.2f}"
+                sent_str = f"{sentiment_val:+.2f}"
                 try:
                     date_str = pd.to_datetime(row.get("date")).strftime("%d %b %H:%M")
                 except Exception:
                     date_str = str(row.get("date", ""))[:16]
 
-                # Clickable link if URL present
-                # Clickable link if URL present
-                url_clean = str(url).strip() if url and str(url) not in ["nan", "None", ""] else ""
-                if url_clean.startswith("http"):
-                    headline_html = ("<a href=\"" + url_clean + "\" target=\"_blank\" "
-                        "style=\"color:#00c3ff; text-decoration:none; font-weight:500;\">"
-                        + headline + " ↗</a>")
+                # Clean URL — handle NaN, None, empty
+                url = str(raw_url).strip() if raw_url and str(raw_url) not in ["nan", "None", ""] else ""
+
+                if url.startswith("http"):
+                    link_start = f'<a href="{url}" target="_blank" style="color:#00c3ff; font-weight:500; text-decoration:none;">'
+                    link_end   = " ↗</a>"
                 else:
-                    headline_html = "<span style=\"color:#FFFFFF; font-weight:500;\">" + headline + "</span>"
+                    link_start = '<span style="color:#FFFFFF; font-weight:500;">'
+                    link_end   = "</span>"
 
-
-                st.markdown(
-                    f'<div style="padding:7px 0; border-bottom:1px solid #222;">' +
-                    f'<div>{headline_html}</div>' +
-                    f'<div style="font-size:11px; color:#888; margin-top:2px;">' +
-                    f'{date_str} &nbsp;|&nbsp; {source} &nbsp;|&nbsp; ' +
-                    f'<span style="color:{sent_color};">{sent_str}</span> sentiment &nbsp;|&nbsp; {topic}' +
-                    f'</div></div>',
-                    unsafe_allow_html=True
+                html = (
+                    '<div style="padding:7px 0; border-bottom:1px solid #222;">' +
+                    '<div>' + link_start + headline + link_end + '</div>' +
+                    '<div style="font-size:11px; color:#888; margin-top:2px;">' +
+                    date_str + " &nbsp;|&nbsp; " + source + " &nbsp;|&nbsp; " +
+                    f'<span style="color:{sent_color};">{sent_str}</span> sentiment &nbsp;|&nbsp; ' + topic +
+                    '</div></div>'
                 )
+                st.markdown(html, unsafe_allow_html=True)
 
             for _, row in table.iterrows():
                 _render_headline(row)
