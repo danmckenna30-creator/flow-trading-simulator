@@ -125,3 +125,62 @@ def save_news_to_sheets(new_results: list) -> None:
 
     except Exception as e:
         print(f"[Sheets] Save error: {e}")
+
+# ══════════════════════════════════════════════════════════════
+# GPT ANALYSIS PERSISTENCE — stored in a second sheet tab
+# so it survives app restarts and redeploys
+# ══════════════════════════════════════════════════════════════
+GPT_TAB_NAME = "gpt_analysis"
+
+
+def _get_gpt_sheet():
+    """Get or create the gpt_analysis worksheet."""
+    try:
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+        gc = gspread.authorize(creds)
+        sh = gc.open(SHEET_NAME)
+        try:
+            return sh.worksheet(GPT_TAB_NAME)
+        except gspread.WorksheetNotFound:
+            ws = sh.add_worksheet(title=GPT_TAB_NAME, rows=10, cols=2)
+            ws.append_row(["key", "value"])
+            return ws
+    except Exception as e:
+        print(f"[GPT Sheet] Connection error: {e}")
+        return None
+
+
+def save_gpt_analysis(gpt_data: dict) -> None:
+    """Persist GPT analysis dict to Google Sheets."""
+    if not gpt_data:
+        return
+    try:
+        import json
+        ws = _get_gpt_sheet()
+        if ws is None:
+            return
+        ws.clear()
+        ws.append_row(["key", "value"])
+        ws.append_row(["gpt_analysis", json.dumps(gpt_data)])
+        ws.append_row(["saved_at", str(pd.Timestamp.now(tz="UTC"))])
+        print("[GPT Sheet] GPT analysis saved.")
+    except Exception as e:
+        print(f"[GPT Sheet] Save error: {e}")
+
+
+def load_gpt_analysis() -> dict | None:
+    """Load GPT analysis from Google Sheets."""
+    try:
+        import json
+        ws = _get_gpt_sheet()
+        if ws is None:
+            return None
+        records = ws.get_all_records()
+        for row in records:
+            if row.get("key") == "gpt_analysis":
+                return json.loads(row["value"])
+        return None
+    except Exception as e:
+        print(f"[GPT Sheet] Load error: {e}")
+        return None

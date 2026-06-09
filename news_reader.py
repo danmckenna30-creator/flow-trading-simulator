@@ -11,7 +11,7 @@ from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 from gpt_layer import call_gpt
 from story_mode import generate_story_mode
-from sheets_db import load_news_from_sheets, save_news_to_sheets
+from sheets_db import load_news_from_sheets, save_news_to_sheets, save_gpt_analysis, load_gpt_analysis
 
 # --- VADER Sentiment ---
 _vader = SentimentIntensityAnalyzer()
@@ -140,105 +140,25 @@ def _fetch_gnews_region(country: str, max_articles: int, label: str) -> list:
         return []
 
 
-# Targeted financial search queries — these use the /search endpoint
-# which returns different articles to the top headlines feed, giving
-# fresher and more relevant content throughout the trading day.
-# Each query costs 1 API request. Total budget per run:
-#   3 regional top headlines + 6 search queries = 9 requests
-#   At 55-min intervals = ~24 runs/day = ~216 requests
-# NOTE: GNews free tier is 100/day. To stay within budget we cap to
-# 3 headlines + 4 searches = 7 per run = ~168/day (borderline).
-# Adjust SEARCH_QUERIES list if you hit limits.
-
-SEARCH_QUERIES = [
-    {"q": "Federal Reserve interest rates",  "label": "Fed",       "max": 3},
-    {"q": "Bank of England inflation",        "label": "BoE",       "max": 3},
-    {"q": "FTSE 100 stock market",            "label": "FTSE",      "max": 2},
-    {"q": "oil price OPEC",                   "label": "Oil",       "max": 2},
-    {"q": "ECB European Central Bank",        "label": "ECB",       "max": 2},
-    {"q": "S&P 500 Wall Street",              "label": "US Equities","max": 2},
-]
-
-
-def _fetch_gnews_search(query: str, max_articles: int, label: str) -> list:
-    """Search GNews for a specific financial topic."""
-    try:
-        import urllib.parse
-        url = (
-            "https://gnews.io/api/v4/search"
-            f"?q={urllib.parse.quote(query)}&lang=en"
-            f"&max={max_articles}&apikey={GNEWS_KEY}"
-        )
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=6)  # fresher window for searches
-        articles = []
-        for a in data.get("articles", []):
-            if not a.get("title"):
-                continue
-            try:
-                pub = pd.to_datetime(a["publishedAt"], utc=True)
-                if pub < cutoff:
-                    continue
-            except Exception:
-                pass
-            articles.append({
-                "source":   f"[{label}] {a.get('source', {}).get('name', 'Unknown')}",
-                "headline": a["title"],
-                "date":     a["publishedAt"],
-                "url":      a.get("url", ""),
-                "region":   label,
-            })
-        print(f"[GNews/search/{label}] Fetched {len(articles)} articles.")
-        return articles
-    except Exception as e:
-        print(f"[GNews/search/{label} error] {e}")
-        return []
-
-
 def fetch_gnews():
-    """
-    Fetch from:
-    1. Regional top headlines (UK, US, Europe) — broad market coverage
-    2. Targeted financial search queries — fresh, specific content
-    All deduplicated by headline text.
-    """
+    """Fetch from UK, US, and European sources and deduplicate by headline."""
     all_articles = []
     seen_headlines = set()
 
-    def _add(articles):
+    for source in GNEWS_SOURCES:
+        articles = _fetch_gnews_region(
+            country=source["country"],
+            max_articles=source["max"],
+            label=source["label"]
+        )
         for a in articles:
+            # Deduplicate on headline text across regions
             key = a["headline"].strip().lower()[:80]
             if key not in seen_headlines:
                 seen_headlines.add(key)
                 all_articles.append(a)
 
-    # Regional top headlines
-    for source in GNEWS_SOURCES:
-        _add(_fetch_gnews_region(
-            country=source["country"],
-            max_articles=source["max"],
-            label=source["label"]
-        ))
-
-    # Targeted financial searches — rotated to spread API usage
-    # Use hour of day to pick a subset so we don't blow the daily limit
-    from datetime import datetime as _dt
-    hour = _dt.now().hour
-    # Each hour picks a different pair of queries (6 queries / 3 pairs)
-    pair_index = (hour % 3)
-    active_queries = SEARCH_QUERIES[pair_index*2 : pair_index*2 + 2]
-
-    for sq in active_queries:
-        _add(_fetch_gnews_search(
-            query=sq["q"],
-            max_articles=sq["max"],
-            label=sq["label"]
-        ))
-
-    print(f"[GNews] Total unique articles this run: {len(all_articles)}")
+    print(f"[GNews] Total unique articles: {len(all_articles)}")
     return all_articles
 
 
@@ -282,7 +202,9 @@ def run_gpt_analysis(results):
         gpt_output = call_gpt(relevant)
         if gpt_output:
             st.session_state["gpt_analysis"] = gpt_output
-            print("GPT analysis saved to session state.")
+            # Persist to Google Sheets so it survives app restarts
+            save_gpt_analysis(gpt_output)
+            print("GPT analysis saved to session state and Sheets.")
     except Exception as e:
         print(f"[GPT error] {e}")
 

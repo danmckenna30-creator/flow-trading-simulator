@@ -95,13 +95,19 @@ def load_news():
         return None
 
 def load_gpt():
+    # 1. Session state (fastest — already in memory)
     if "gpt_analysis" in st.session_state:
         return st.session_state["gpt_analysis"]
+    # 2. Google Sheets (survives restarts and redeploys)
     try:
-        with open("gpt_analysis.json", "r") as f:
-            return json.load(f)
-    except Exception:
-        return None
+        from sheets_db import load_gpt_analysis
+        data = load_gpt_analysis()
+        if data:
+            st.session_state["gpt_analysis"] = data  # cache in session
+            return data
+    except Exception as e:
+        print(f"[load_gpt] Sheets fallback error: {e}")
+    return None
 
 # ---------- LOAD AI HYPE HISTORY ----------
 def load_ai_hype_history():
