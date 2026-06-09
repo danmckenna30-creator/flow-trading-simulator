@@ -958,10 +958,38 @@ with tabs[0]:
     with bottom_left:
         st.markdown("### Latest Headlines")
         if news_df is not None and len(news_df) > 0:
-            show_cols = ["date", "source", "headline", "sentiment", "topic", "relevance"]
-            existing = [c for c in show_cols if c in news_df.columns]
-            table = news_df.sort_values("date", ascending=False)[existing].head(25)
-            st.dataframe(table, use_container_width=True, hide_index=True)
+            table = news_df.sort_values("date", ascending=False).head(25)
+            for _, row in table.iterrows():
+                headline = str(row.get("headline", ""))
+                source   = str(row.get("source", ""))
+                url      = str(row.get("url", ""))
+                topic    = str(row.get("topic", "other"))
+                sentiment_val = float(row.get("sentiment", 0))
+                sent_color = "#00ff88" if sentiment_val > 0.05 else "#ff4d4d" if sentiment_val < -0.05 else "#FFDC00"
+                sent_str   = f"{sentiment_val:+.2f}"
+                try:
+                    date_str = pd.to_datetime(row.get("date")).strftime("%d %b %H:%M")
+                except Exception:
+                    date_str = str(row.get("date", ""))[:16]
+
+                # Render as clickable link if URL available
+                if url and url.startswith("http"):
+                    headline_html = f"<a href=\"{url}\" target=\"_blank\" style=\"color:#FFFFFF; text-decoration:none; font-weight:500;\">{headline}</a>"
+                    link_icon = "🔗 "
+                else:
+                    headline_html = f"<span style=\"color:#FFFFFF; font-weight:500;\">{headline}</span>"
+                    link_icon = ""
+
+                st.markdown(
+                    f"<div style=\"padding:6px 0; border-bottom:1px solid #222;\">"
+                    f"<div>{link_icon}{headline_html}</div>"
+                    f"<div style=\"font-size:11px; color:#888; margin-top:2px;\">"
+                    f"{date_str} &nbsp;|&nbsp; {source} &nbsp;|&nbsp; "
+                    f"<span style=\"color:{sent_color};\">{sent_str}</span> sentiment &nbsp;|&nbsp; {topic}"
+                    f"</div>"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
         else:
             st.markdown("<p style='color:#AAAAAA;'>No news data available yet.</p>", unsafe_allow_html=True)
 

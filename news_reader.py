@@ -184,6 +184,7 @@ def process_all_news(existing_df=None):
             analysis = process_headline(article["headline"])
             analysis["source"] = article.get("source")
             analysis["date"]   = article.get("date")
+            analysis["url"]    = article.get("url", "")
             analysis["id"]     = aid
             results.append(analysis)
         except Exception as e:

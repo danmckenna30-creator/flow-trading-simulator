@@ -19,7 +19,7 @@ SHEET_NAME = "MacroNewsData"   # name of the Google Sheet
 TAB_NAME   = "news"            # worksheet tab name
 
 COLUMNS = ["id", "date", "source", "headline", "sentiment",
-           "relevance", "topic", "escalate"]
+           "relevance", "topic", "escalate", "url"]
 
 
 def get_sheet():
@@ -93,6 +93,7 @@ def save_news_to_sheets(new_results: list) -> None:
                 float(r.get("relevance", 0)),
                 str(r.get("topic", "")),
                 str(r.get("escalate", False)),
+                str(r.get("url", "")),
             ]
             for r in to_add
         ]
