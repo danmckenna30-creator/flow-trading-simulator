@@ -2493,7 +2493,7 @@ with tabs[5]:
 - **Be specific** — "Long Brent Crude at $82" not "oil looks good"
 - **Define your levels** — entry, target, and stop before you put it on
 - **State your catalyst** — what event or data will prove you right?
-- **Know your risk/reward** — aim for at least 2:1 (risk $1 to make $2)
+- **Know your risk/reward** — aim for at least 2:1 (risk \$1 to make \$2)
 - **Set a time horizon** — when will you know if you're wrong?
         """)
 
