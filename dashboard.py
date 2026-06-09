@@ -706,7 +706,7 @@ To reduce inventory risk, you hedge — placing an offsetting trade in the marke
 
 
 # ---------- TABS INITIALIZATION ----------
-tabs = st.tabs(["Macro", "Risk", "Commodities", "S&P500", "Flow Trading", "Trade Ideas"])
+tabs = st.tabs(["Macro", "Risk", "Commodities", "S&P500", "Flow Trading", "Trade Ideas", "Econ Calendar"])
 
 # ---------- LOAD MARKET DATA ----------
 prices = get_market_data()
@@ -2493,7 +2493,7 @@ with tabs[5]:
 - **Be specific** — "Long Brent Crude at $82" not "oil looks good"
 - **Define your levels** — entry, target, and stop before you put it on
 - **State your catalyst** — what event or data will prove you right?
-- **Know your risk/reward** — aim for at least 2:1 (risk \$1 to make \$2)
+- **Know your risk/reward** — aim for at least 2:1 (risk $1 to make $2)
 - **Set a time horizon** — when will you know if you're wrong?
         """)
 
@@ -2593,4 +2593,303 @@ Be concise (2-4 sentences) and direct."""
     if st.session_state.get(tab_chat_key):
         if st.button("🗑️ Clear chat", key="clear_chat_Trade Ideas"):
             st.session_state[tab_chat_key] = []
+            st.rerun()
+
+# ══════════════════════════════════════════════════════════════
+# TAB 6 — ECONOMIC CALENDAR
+# ══════════════════════════════════════════════════════════════
+with tabs[6]:
+    import json as _json2
+    from datetime import datetime as _dt3, timedelta as _td
+
+    st.markdown("## 📅 Economic Calendar")
+    st.caption("Track upcoming macro events, form your own forecast before each release, and train the instinct of connecting data to market moves — the core skill tested in every S&T interview.")
+    st.markdown("---")
+
+    # ── UPCOMING EVENTS DATABASE ─────────────────────────────────
+    # Key recurring events with typical market impact
+    ECON_EVENTS = [
+        # US
+        {"name": "US Non-Farm Payrolls (NFP)",       "country": "🇺🇸", "frequency": "Monthly (1st Friday)",  "importance": "🔴 HIGH",  "typical_surprise_impact": "Big miss = risk-off, bonds rally, USD falls. Big beat = rates rise, USD rallies, equities mixed.",    "assets_affected": ["S&P 500","US 10Y (IEF)","USD/JPY","Gold"]},
+        {"name": "US CPI (Inflation)",                "country": "🇺🇸", "frequency": "Monthly (mid-month)",   "importance": "🔴 HIGH",  "typical_surprise_impact": "Hot CPI = rates spike, equities fall, USD rallies. Cool CPI = rally everything, bonds up.",         "assets_affected": ["US 10Y (IEF)","S&P 500","Gold","EUR/USD"]},
+        {"name": "Federal Reserve Meeting (FOMC)",    "country": "🇺🇸", "frequency": "8x per year",           "importance": "🔴 HIGH",  "typical_surprise_impact": "Hawkish surprise = rates up, equities down, USD up. Dovish pivot = equity rally, bonds rally.",      "assets_affected": ["US 10Y (IEF)","S&P 500","Gold","USD/JPY","EUR/USD"]},
+        {"name": "US GDP (Advance)",                  "country": "🇺🇸", "frequency": "Quarterly",             "importance": "🟡 MEDIUM","typical_surprise_impact": "Strong GDP = risk-on, rates may rise. Weak GDP = recession fears, bonds rally, equities fall.",       "assets_affected": ["S&P 500","US 10Y (IEF)","USD/JPY"]},
+        {"name": "US Jobless Claims",                 "country": "🇺🇸", "frequency": "Weekly (Thursday)",     "importance": "🟡 MEDIUM","typical_surprise_impact": "Rising claims = labour market softening, dovish expectations build. Falling = hawkish pressure.",      "assets_affected": ["US 10Y (IEF)","S&P 500","USD/JPY"]},
+        {"name": "US ISM Manufacturing PMI",          "country": "🇺🇸", "frequency": "Monthly (1st day)",     "importance": "🟡 MEDIUM","typical_surprise_impact": "Above 50 = expansion, risk-on. Below 50 = contraction signal, risk-off.",                            "assets_affected": ["S&P 500","Copper","USD/JPY"]},
+        {"name": "US Retail Sales",                   "country": "🇺🇸", "frequency": "Monthly (mid-month)",   "importance": "🟡 MEDIUM","typical_surprise_impact": "Strong = consumer resilient, hawkish. Weak = slowdown fears, dovish.",                               "assets_affected": ["S&P 500","EUR/USD"]},
+        {"name": "US PPI (Producer Prices)",          "country": "🇺🇸", "frequency": "Monthly",               "importance": "🟢 LOW",   "typical_surprise_impact": "Leading indicator for CPI. Hot PPI warns inflation pipeline is building.",                           "assets_affected": ["US 10Y (IEF)","Gold"]},
+        # Europe
+        {"name": "ECB Interest Rate Decision",        "country": "🇪🇺", "frequency": "8x per year",           "importance": "🔴 HIGH",  "typical_surprise_impact": "Hawkish = EUR rallies, European bonds fall. Dovish = EUR falls, peripheral spreads tighten.",        "assets_affected": ["EUR/USD","US 10Y (IEF)","Gold"]},
+        {"name": "Eurozone CPI (Flash)",              "country": "🇪🇺", "frequency": "Monthly (end of month)","importance": "🟡 MEDIUM","typical_surprise_impact": "Hot = ECB hawkish expectations, EUR up. Cool = ECB cut expectations, EUR falls.",                    "assets_affected": ["EUR/USD","GBP/USD"]},
+        {"name": "Eurozone GDP (Flash)",              "country": "🇪🇺", "frequency": "Quarterly",             "importance": "🟡 MEDIUM","typical_surprise_impact": "Weak GDP increases ECB cut expectations, EUR falls. Strong = hawkish, EUR up.",                      "assets_affected": ["EUR/USD","GBP/USD"]},
+        {"name": "German IFO Business Climate",       "country": "🇩🇪", "frequency": "Monthly",               "importance": "🟢 LOW",   "typical_surprise_impact": "Germany is Europe's largest economy. Weak IFO = European risk-off, EUR falls.",                     "assets_affected": ["EUR/USD"]},
+        # UK
+        {"name": "Bank of England Meeting (MPC)",     "country": "🇬🇧", "frequency": "8x per year",           "importance": "🔴 HIGH",  "typical_surprise_impact": "Hawkish = GBP rallies, gilts sell off. Dovish = GBP falls, gilts rally.",                          "assets_affected": ["GBP/USD","US 10Y (IEF)"]},
+        {"name": "UK CPI",                            "country": "🇬🇧", "frequency": "Monthly",               "importance": "🟡 MEDIUM","typical_surprise_impact": "Hot UK CPI = BoE hawkish, GBP rallies. Cool = BoE cut expectations, GBP falls.",                   "assets_affected": ["GBP/USD"]},
+        {"name": "UK GDP",                            "country": "🇬🇧", "frequency": "Monthly",               "importance": "🟢 LOW",   "typical_surprise_impact": "Weak GDP = recession fears, GBP falls. Strong = BoE stays hawkish, GBP up.",                       "assets_affected": ["GBP/USD"]},
+        # China
+        {"name": "China PMI (Caixin Manufacturing)",  "country": "🇨🇳", "frequency": "Monthly (1st day)",     "importance": "🟡 MEDIUM","typical_surprise_impact": "Strong China PMI = copper rallies, risk-on in Asia, global growth optimism.",                       "assets_affected": ["Copper","Brent Crude","S&P 500"]},
+        {"name": "China GDP",                         "country": "🇨🇳", "frequency": "Quarterly",             "importance": "🔴 HIGH",  "typical_surprise_impact": "Weak China GDP = global growth fears, commodities sell off, EM currencies fall.",                    "assets_affected": ["Copper","Brent Crude","Gold"]},
+        # Commodities/Other
+        {"name": "OPEC+ Meeting",                     "country": "🌍",  "frequency": "Periodic",              "importance": "🔴 HIGH",  "typical_surprise_impact": "Production cut = oil rallies. Production increase = oil falls. Key for energy sector.",              "assets_affected": ["Brent Crude","Natural Gas"]},
+        {"name": "EIA Crude Oil Inventories",         "country": "🇺🇸", "frequency": "Weekly (Wednesday)",    "importance": "🟢 LOW",   "typical_surprise_impact": "Large inventory build = oil falls (oversupply). Large draw = oil rallies (demand strong).",         "assets_affected": ["Brent Crude","Natural Gas"]},
+        {"name": "US 10Y Treasury Auction",           "country": "🇺🇸", "frequency": "Monthly",               "importance": "🟡 MEDIUM","typical_surprise_impact": "Weak auction (low demand) = yields rise, bonds fall. Strong = yields fall, bonds rally.",            "assets_affected": ["US 10Y (IEF)","US 30Y (TLT)","Gold"]},
+    ]
+
+    # ── SECTION 1: MARKET IMPACT TRAINING ───────────────────────
+    st.markdown("### 🎯 Market Impact Training")
+    st.caption("Pick an economic event, enter your forecast vs the consensus, and GPT will walk you through exactly what would happen to each market — training the reflex that S&T interviewers test.")
+
+    importance_filter = st.multiselect(
+        "Filter by importance",
+        ["🔴 HIGH", "🟡 MEDIUM", "🟢 LOW"],
+        default=["🔴 HIGH", "🟡 MEDIUM"],
+        key="econ_filter"
+    )
+    country_filter = st.multiselect(
+        "Filter by country",
+        ["🇺🇸", "🇪🇺", "🇬🇧", "🇨🇳", "🇩🇪", "🌍"],
+        default=["🇺🇸", "🇪🇺", "🇬🇧"],
+        key="econ_country_filter"
+    )
+
+    filtered_events = [e for e in ECON_EVENTS
+                       if e["importance"] in importance_filter
+                       and e["country"] in country_filter]
+
+    selected_event_name = st.selectbox(
+        "Select economic event",
+        [f"{e['country']} {e['name']}" for e in filtered_events],
+        key="econ_event_select"
+    )
+    selected_event = next((e for e in filtered_events
+                           if f"{e['country']} {e['name']}" == selected_event_name), None)
+
+    if selected_event:
+        # Event info card
+        st.markdown(
+            f"<div class='card' style='margin-bottom:12px;'>"
+            f"<div style='font-size:18px; font-weight:bold;'>{selected_event['country']} {selected_event['name']}</div>"
+            f"<div style='color:#888; font-size:13px; margin-top:4px;'>{selected_event['importance']} &nbsp;|&nbsp; {selected_event['frequency']}</div>"
+            f"<div style='color:#AAAAAA; font-size:13px; margin-top:6px;'>Assets affected: {', '.join(selected_event['assets_affected'])}</div>"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+
+        st.markdown("#### 📊 Typical Surprise Impact")
+        st.info(selected_event["typical_surprise_impact"])
+
+        st.markdown("---")
+        st.markdown("#### 🧠 Scenario Training — What Would Happen If...")
+
+        col_prev, col_cons, col_actual = st.columns(3)
+        with col_prev:
+            previous = st.text_input("Previous reading", placeholder="e.g. 150k / 2.3% / 52.1", key="econ_previous")
+        with col_cons:
+            consensus = st.text_input("Consensus forecast", placeholder="e.g. 180k / 2.5% / 51.0", key="econ_consensus")
+        with col_actual:
+            actual = st.text_input("Actual / Your forecast", placeholder="e.g. 250k / 3.1% / 48.5", key="econ_actual")
+
+        scenario_type = st.radio(
+            "Scenario",
+            ["Big Beat (much better than expected)", "Small Beat", "In Line", "Small Miss", "Big Miss (much worse than expected)"],
+            horizontal=True,
+            key="econ_scenario"
+        )
+
+        if st.button("🔍 Analyse Market Impact", key="econ_analyse_btn", type="primary"):
+            with st.spinner("Analysing market impact..."):
+                try:
+                    from gpt_layer import call_gpt_prose
+
+                    # Get current market context
+                    vix_ctx = (prices.get("VIX") or {}).get("price", "N/A")
+                    spx_ctx = (prices.get("S&P 500") or {}).get("change", "N/A")
+
+                    impact_prompt = f"""You are a senior S&T trader explaining the market impact of an economic data release to a junior analyst.
+
+EVENT: {selected_event['name']} ({selected_event['country']})
+Previous: {previous or 'Not specified'}
+Consensus: {consensus or 'Not specified'}
+Actual/Forecast: {actual or 'Not specified'}
+Scenario: {scenario_type}
+
+CURRENT MARKET CONTEXT:
+VIX: {vix_ctx} | S&P 500: {spx_ctx}% today
+
+PRIMARY ASSETS AFFECTED: {', '.join(selected_event['assets_affected'])}
+
+Please provide a STRUCTURED market impact analysis covering:
+
+**IMMEDIATE REACTION (0-5 minutes)**
+What happens in the first few minutes across rates, FX, equities, and commodities? Be specific with direction and magnitude (e.g. "US 10Y yields spike 8-12bps", "EUR/USD drops 50-80 pips", "S&P futures fall 0.5-1%").
+
+**FLOW IMPLICATIONS (What clients will do)**
+What will institutional clients do in response? What orders will flow through the desk? Which assets will see buying/selling?
+
+**SECOND-ORDER EFFECTS (30 mins - 1 day)**
+What happens next as traders reassess positioning? Any sector rotation? Cross-asset themes?
+
+**THE KEY TRADE**
+If this scenario played out, what is the single best trade to express it? Be specific: direction, instrument, rationale, rough target.
+
+**INTERVIEW ANSWER**
+Write a 2-sentence answer that a sharp junior trader would give if asked "NFP just printed X — what do you do?" in a morning meeting.
+
+Be specific with numbers. Use trading desk language. This person is trying to learn S&T."""
+
+                    impact = call_gpt_prose(impact_prompt)
+                    st.session_state["econ_impact"] = impact or "Could not generate analysis."
+                except Exception as e:
+                    st.session_state["econ_impact"] = f"Error: {e}"
+
+        impact_text = st.session_state.get("econ_impact", "Fill in the fields above and click Analyse to see what would happen across markets.")
+        if st.session_state.get("econ_impact"):
+            st.markdown(f"<div class='card' style='line-height:1.8; color:#DDDDDD; white-space:pre-wrap;'>{impact_text}</div>", unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── SECTION 2: EVENT REFERENCE GUIDE ────────────────────────
+    st.markdown("### 📖 Event Reference Guide")
+    st.caption("A quick reference for every major macro release — what it measures, why it matters, and the typical market reaction to a surprise.")
+
+    for importance in ["🔴 HIGH", "🟡 MEDIUM", "🟢 LOW"]:
+        events_in_group = [e for e in ECON_EVENTS if e["importance"] == importance]
+        if not events_in_group:
+            continue
+
+        label = {"🔴 HIGH": "High Impact Events", "🟡 MEDIUM": "Medium Impact Events", "🟢 LOW": "Lower Impact Events"}[importance]
+        with st.expander(f"{importance} — {label} ({len(events_in_group)} events)", expanded=(importance == "🔴 HIGH")):
+            for event in events_in_group:
+                st.markdown(
+                    f"<div class='card' style='margin-bottom:8px;'>"
+                    f"<div style='font-weight:bold; font-size:14px;'>{event['country']} {event['name']} <span style='color:#888; font-size:12px; font-weight:normal;'>— {event['frequency']}</span></div>"
+                    f"<div style='color:#AAAAAA; font-size:12px; margin-top:4px;'>Assets: {', '.join(event['assets_affected'])}</div>"
+                    f"<div style='color:#DDDDDD; font-size:12px; margin-top:4px;'>{event['typical_surprise_impact']}</div>"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
+
+    st.markdown("---")
+
+    # ── SECTION 3: MACRO CALENDAR CHEAT SHEET ───────────────────
+    st.markdown("### 🗓️ Weekly Macro Calendar")
+    st.caption("The typical weekly rhythm of macro data releases. Knowing this calendar by heart is expected of every S&T analyst.")
+
+    week_data = {
+        "Monday":    ["🇨🇳 China PMI (monthly, 1st Mon)", "🇪🇺 Eurozone PMI", "🇬🇧 UK PMI"],
+        "Tuesday":   ["🇺🇸 ISM Manufacturing PMI (1st Tue)", "🇺🇸 JOLTS Job Openings", "🇬🇧 UK Employment"],
+        "Wednesday": ["🇺🇸 ADP Employment (before NFP week)", "🇺🇸 EIA Oil Inventories", "🇺🇸 FOMC Minutes (periodic)"],
+        "Thursday":  ["🇺🇸 Weekly Jobless Claims", "🇪🇺 ECB Meeting (periodic)", "🇬🇧 BoE Meeting (periodic)"],
+        "Friday":    ["🇺🇸 Non-Farm Payrolls (1st Friday)", "🇺🇸 CPI (mid-month)", "🇺🇸 Retail Sales (mid-month)"],
+    }
+
+    day_cols = st.columns(5)
+    day_colors = {"Monday": "#333", "Tuesday": "#333", "Wednesday": "#1a1a2e", "Thursday": "#333", "Friday": "#1a3a1a"}
+    for col, (day, events_list) in zip(day_cols, week_data.items()):
+        with col:
+            st.markdown(f"<div class='card' style='background:{day_colors[day]};'><div class='label' style='color:#00c3ff;'>{day.upper()}</div>", unsafe_allow_html=True)
+            for ev in events_list:
+                st.markdown(f"<div style='font-size:11px; color:#DDDDDD; margin-top:4px;'>• {ev}</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+    st.caption("Friday is the most important day — NFP can move every asset class simultaneously. Wednesday is key for energy traders (EIA inventories). Thursday is crucial for rates traders in Europe (ECB/BoE meetings).")
+
+    st.markdown("---")
+
+    # ── SECTION 4: INTERVIEW QUICK FIRE ─────────────────────────
+    st.markdown("### ⚡ Quick Fire: Data Release Interview Questions")
+    st.caption("Common S&T interview questions about economic data. Click Generate to get a random one and practice your answer.")
+
+    QUICK_FIRE_QS = [
+        "NFP just came in at 280k vs 190k expected. Walk me through what happens to rates, equities, and the dollar.",
+        "US CPI prints 3.8% vs 3.2% expected. What's your immediate trade?",
+        "The Fed just hiked 25bps but signalled a pause. EUR/USD is up 80 pips. Is that the right move?",
+        "China PMI comes in at 47.2 vs 50.5 expected. What happens to copper and why?",
+        "UK CPI surprises to the upside at 5.2% vs 4.8%. Walk me through the GBP reaction.",
+        "OPEC announces a surprise 1 million barrel/day production cut. What do you buy and what do you sell?",
+        "US 10Y auction comes in with a tail — demand was much weaker than expected. What does this mean for markets?",
+        "The ECB is dovish but the Fed is hawkish. What does that mean for EUR/USD over the next month?",
+        "US GDP comes in at -0.3% for Q2 — two consecutive negative quarters. How does the market react?",
+        "ISM Manufacturing PMI drops to 44.5 — its lowest in two years. What rotations do you expect in equities?",
+        "German IFO drops sharply. You're long EUR/USD. Do you hold or cut?",
+        "The Fed pauses but core CPI is still at 3.5%. What's the market's dilemma and how do you trade it?",
+    ]
+
+    if st.button("🎲 Generate Question", key="quickfire_btn"):
+        import random as _rand
+        st.session_state["quickfire_q"] = _rand.choice(QUICK_FIRE_QS)
+        st.session_state.pop("quickfire_answer", None)
+
+    if "quickfire_q" in st.session_state:
+        st.markdown(f"<div class='card' style='border-left:4px solid #00c3ff; font-size:16px; font-weight:bold; color:#FFFFFF;'>❓ {st.session_state['quickfire_q']}</div>", unsafe_allow_html=True)
+        st.markdown("")
+
+        user_answer = st.text_area("Your answer:", height=100, key="quickfire_user_answer", placeholder="Type your answer as if you're in the interview...")
+
+        if st.button("✅ Submit Answer for Feedback", key="quickfire_submit"):
+            if not user_answer.strip():
+                st.warning("Type your answer first.")
+            else:
+                with st.spinner("Evaluating your answer..."):
+                    try:
+                        from gpt_layer import call_gpt_prose
+                        qa_prompt = f"""You are a managing director conducting an S&T interview at a top investment bank.
+
+QUESTION ASKED: {st.session_state['quickfire_q']}
+
+CANDIDATE'S ANSWER: {user_answer}
+
+Evaluate this answer as if you're in the interview room. Provide:
+
+1. SCORE: X/10
+2. WHAT THEY GOT RIGHT (be specific)
+3. WHAT'S MISSING OR WRONG (be direct — what would make you mark them down?)
+4. THE IDEAL ANSWER in 3-4 sentences — what a strong candidate would say
+5. ONE FOLLOW-UP QUESTION you would ask next to probe deeper
+
+Be tough but fair. This is a competitive process."""
+
+                        feedback = call_gpt_prose(qa_prompt)
+                        st.session_state["quickfire_answer"] = feedback or "Could not generate feedback."
+                    except Exception as e:
+                        st.session_state["quickfire_answer"] = f"Error: {e}"
+
+        if "quickfire_answer" in st.session_state:
+            st.markdown(f"<div class='card' style='line-height:1.8; color:#DDDDDD; white-space:pre-wrap;'>{st.session_state['quickfire_answer']}</div>", unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── TAB CHAT ─────────────────────────────────────────────────
+    _tab_name_ec = "Econ Calendar"
+    tab_chat_key_ec = f"chat_history_{_tab_name_ec}"
+    if tab_chat_key_ec not in st.session_state:
+        st.session_state[tab_chat_key_ec] = []
+
+    st.markdown("### 💬 Ask the Trading Assistant")
+    st.caption("Ask anything about economic data, how to read releases, or how to answer data questions in interviews.")
+
+    for msg in st.session_state[tab_chat_key_ec]:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    if _qec := st.chat_input("Ask about economic data, market reactions, or interview prep...", key="chat_input_Econ Calendar"):
+        st.session_state[tab_chat_key_ec].append({"role": "user", "content": _qec})
+        with st.chat_message("user"):
+            st.markdown(_qec)
+        _sys_ec = """You are an expert macro trading mentor. Help with understanding economic data releases, market reactions, and S&T interview preparation. Be concise and use trading desk language."""
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                try:
+                    from gpt_layer import call_gpt_prose
+                    _r = call_gpt_prose(f"{_sys_ec}\n\nQuestion: {_qec}")
+                    if _r:
+                        st.markdown(_r)
+                        st.session_state[tab_chat_key_ec].append({"role": "assistant", "content": _r})
+                except Exception as e:
+                    st.markdown(f"Error: {e}")
+
+    if st.session_state.get(tab_chat_key_ec):
+        if st.button("🗑️ Clear chat", key="clear_chat_Econ Calendar"):
+            st.session_state[tab_chat_key_ec] = []
             st.rerun()
