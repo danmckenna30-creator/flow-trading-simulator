@@ -3131,25 +3131,168 @@ with tabs[7]:
         total  = len(scores)
         avg    = round(sum(s["score"] for s in scores) / total, 1)
         by_cat = {}
+        by_level = {}
         for s in scores:
             by_cat.setdefault(s["category"], []).append(s["score"])
+            by_level.setdefault(s.get("level",""), []).append(s["score"])
+
+        # Identify weak spots — category + level combinations
+        cat_avgs   = {c: round(sum(v)/len(v), 1) for c, v in by_cat.items()}
+        level_avgs = {l: round(sum(v)/len(v), 1) for l, v in by_level.items() if l}
+        best_cat   = max(cat_avgs, key=cat_avgs.get) if cat_avgs else "—"
+        weak_cat   = min(cat_avgs, key=cat_avgs.get) if cat_avgs else "—"
+        weak_level = min(level_avgs, key=level_avgs.get) if level_avgs else "—"
+
+        # Last 3 questions for context
+        recent_scores = scores[-3:]
+        recent_avg    = round(sum(s["score"] for s in recent_scores) / len(recent_scores), 1)
+        recent_trend  = "📈 Improving" if len(scores) >= 3 and recent_avg > avg else "📉 Declining" if len(scores) >= 3 and recent_avg < avg else "➡️ Steady"
 
         st.markdown("### 📊 Your Progress")
-        pc1, pc2, pc3, pc4 = st.columns(4)
+        pc1, pc2, pc3, pc4, pc5 = st.columns(5)
         with pc1:
             st.markdown(f"<div class='card'><div class='label'>Questions Answered</div><div class='big-number'>{total}</div></div>", unsafe_allow_html=True)
         with pc2:
             avg_color = "#00ff88" if avg >= 7 else "#FFDC00" if avg >= 5 else "#ff4d4d"
-            st.markdown(f"<div class='card'><div class='label'>Average Score</div><div class='big-number' style='color:{avg_color};'>{avg}/10</div></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='card'><div class='label'>Overall Average</div><div class='big-number' style='color:{avg_color};'>{avg}/10</div></div>", unsafe_allow_html=True)
         with pc3:
-            best_cat = max(by_cat, key=lambda c: sum(by_cat[c])/len(by_cat[c])) if by_cat else "—"
-            st.markdown(f"<div class='card'><div class='label'>Strongest Area</div><div class='big-number' style='font-size:20px;'>{best_cat}</div></div>", unsafe_allow_html=True)
+            trend_color = "#00ff88" if "Improving" in recent_trend else "#ff4d4d" if "Declining" in recent_trend else "#FFDC00"
+            st.markdown(f"<div class='card'><div class='label'>Recent Trend</div><div class='big-number' style='color:{trend_color}; font-size:16px;'>{recent_trend}</div><div class='label'>{recent_avg}/10 last 3</div></div>", unsafe_allow_html=True)
         with pc4:
-            weak_cat = min(by_cat, key=lambda c: sum(by_cat[c])/len(by_cat[c])) if by_cat else "—"
-            st.markdown(f"<div class='card'><div class='label'>Weakest Area</div><div class='big-number' style='font-size:20px; color:#FFDC00;'>{weak_cat}</div></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='card'><div class='label'>Strongest Area</div><div class='big-number' style='font-size:18px; color:#00ff88;'>{best_cat}</div><div class='label'>{cat_avgs.get(best_cat,'—')}/10 avg</div></div>", unsafe_allow_html=True)
+        with pc5:
+            weak_score = cat_avgs.get(weak_cat, "—")
+            wc = "#ff4d4d" if isinstance(weak_score, float) and weak_score < 5 else "#FFDC00"
+            st.markdown(f"<div class='card'><div class='label'>Weakest Area</div><div class='big-number' style='font-size:18px; color:{wc};'>{weak_cat}</div><div class='label'>{weak_score}/10 avg</div></div>", unsafe_allow_html=True)
+
+        st.markdown("")
+
+        # Per-category score breakdown bar
+        if len(cat_avgs) > 1:
+            fig_prog = go.Figure(go.Bar(
+                x=list(cat_avgs.keys()),
+                y=list(cat_avgs.values()),
+                marker_color=["#00ff88" if v >= 7 else "#FFDC00" if v >= 5 else "#ff4d4d" for v in cat_avgs.values()],
+                text=[f"{v}/10" for v in cat_avgs.values()],
+                textposition="outside"
+            ))
+            fig_prog.update_layout(
+                template="plotly_dark", height=220,
+                margin=dict(l=20, r=20, t=20, b=20),
+                yaxis=dict(range=[0,10], gridcolor="#333"),
+                xaxis=dict(showgrid=False),
+            )
+            st.plotly_chart(fig_prog, use_container_width=True)
+
+        # Recent question history
+        with st.expander("📋 Question History", expanded=False):
+            for s in reversed(scores[-10:]):
+                sc = s["score"]
+                sc_color = "#00ff88" if sc >= 7 else "#FFDC00" if sc >= 5 else "#ff4d4d"
+                st.markdown(
+                    f"<div style='padding:4px 0; border-bottom:1px solid #222; font-size:12px;'>"
+                    f"<span style='color:{sc_color}; font-weight:bold;'>{sc}/10</span>"
+                    f" &nbsp;|&nbsp; <span style='color:#888;'>{s.get('category','')} · {s.get('level','')}</span>"
+                    f" &nbsp;|&nbsp; {s.get('question','')}"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
+
+        # ── ADAPTIVE LESSON GENERATOR ────────────────────────
+        st.markdown("")
+        st.markdown("#### 🎓 Adaptive Lesson")
+
+        # Determine what to teach — prioritise the last low-scoring question
+        last_weak = None
+        for s in reversed(scores):
+            if s["score"] <= 5:
+                last_weak = s
+                break
+
+        if last_weak:
+            if last_weak:
+                weak_q = last_weak.get("question", "")
+                weak_s = last_weak.get("score", 0)
+                weak_l = last_weak.get("level", "")
+                weak_c = last_weak.get("category", "")
+                st.markdown(
+                    f'<div class="card" style="border-left:3px solid #FFDC00;">'
+                    f'<div style="color:#FFDC00; font-size:12px; font-weight:bold;">⚠️ WEAK SPOT DETECTED</div>'
+                    f'<div style="color:#DDDDDD; font-size:13px; margin-top:4px;">'
+                    f'You scored <strong>{weak_s}/10</strong> on a <strong>{weak_l} {weak_c}</strong> question: "{weak_q}..."'
+                    '</div></div>',
+                    unsafe_allow_html=True
+                )
+                lesson_context = f"Category: {weak_c} | Level: {weak_l} | Question: {weak_q}"
+        else:
+            # No low scores — teach the weakest category
+            lesson_context = f"Category: {weak_cat} | Level: {weak_level} | Average score: {cat_avgs.get(weak_cat, 5)}/10"
+
+        if st.button("📖 Generate Lesson for My Weak Spot", key="gen_lesson_btn", type="primary"):
+            with st.spinner("Generating your personalised lesson..."):
+                try:
+                    from gpt_layer import call_gpt_prose
+
+                    # Include last few wrong answers for extra context
+                    wrong_qs = [s for s in scores if s["score"] <= 5][-3:]
+                    wrong_context = "\n".join([
+                        f"- {s.get('question','')} (scored {s['score']}/10)"
+                        for s in wrong_qs
+                    ]) if wrong_qs else "No specific wrong answers yet."
+
+                    lesson_prompt = f"""You are a top-tier finance tutor who has trained graduates at Goldman Sachs, Morgan Stanley, and Barclays. A student is preparing for S&T and IBD interviews in London and has shown weakness in specific areas.
+
+THEIR WEAK SPOT:
+{lesson_context}
+
+RECENT LOW-SCORING QUESTIONS:
+{wrong_context}
+
+OVERALL WEAK CATEGORY: {weak_cat} (avg {cat_avgs.get(weak_cat, 'N/A')}/10)
+
+Write a focused, high-quality lesson that will directly improve their performance on these topics. Structure it as:
+
+## THE CORE CONCEPT
+[Explain the key concept they're struggling with in plain English — assume they have basic finance knowledge but are not expert. 3-4 sentences.]
+
+## WHY IT MATTERS FOR INTERVIEWS
+[Why does this come up? What are interviewers really testing when they ask about this? 2-3 sentences.]
+
+## THE MENTAL MODEL
+[Give them a simple framework or mental model they can use to structure their answer. Use an analogy if it helps. 3-4 sentences.]
+
+## WORKED EXAMPLE
+[Walk through a concrete, real-world example that illustrates the concept. Use real companies, real numbers, real events where possible. 4-5 sentences.]
+
+## THE PERFECT INTERVIEW ANSWER
+[Show them exactly how to answer a question on this topic in an interview. Write it as if they are speaking. 4-5 sentences that would genuinely impress an MD.]
+
+## THREE THINGS TO REMEMBER
+1. [Key fact or principle]
+2. [Key fact or principle]
+3. [Key fact or principle]
+
+## PRACTICE QUESTION
+[One follow-up question on this topic they should be able to answer after reading this lesson]
+
+Write in a direct, teacher-to-student style. Be specific and practical — no generic finance textbook language."""
+
+                    lesson = call_gpt_prose(lesson_prompt)
+                    st.session_state["adaptive_lesson"] = lesson or "Could not generate lesson."
+                except Exception as e:
+                    st.session_state["adaptive_lesson"] = f"Error: {e}"
+
+        if "adaptive_lesson" in st.session_state:
+            st.markdown(
+                f"<div class='card' style='line-height:1.9; color:#DDDDDD; white-space:pre-wrap;'>"
+                f"{st.session_state['adaptive_lesson']}"
+                f"</div>",
+                unsafe_allow_html=True
+            )
 
         if st.button("🗑️ Reset Progress", key="reset_prep"):
-            st.session_state["prep_scores"] = []
+            for k in ["prep_scores", "adaptive_lesson", "qf_feedback", "drill_feedback"]:
+                st.session_state.pop(k, None)
             st.rerun()
         st.markdown("---")
 
