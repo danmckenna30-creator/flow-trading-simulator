@@ -41,24 +41,40 @@ def article_id(article):
 # --- Analysis ---
 def classify_relevance(text):
     keywords = [
-        "inflation", "rates", "fed", "ecb", "bank of england",
-        "earnings", "growth", "recession", "oil", "energy",
-        "geopolitics", "war", "jobs", "cpi", "gdp", "bond yields"
+        # US macro
+        "inflation", "rates", "fed", "federal reserve", "fomc",
+        "earnings", "growth", "recession", "jobs", "cpi", "gdp",
+        "bond yields", "treasury", "nfp", "payrolls", "retail sales",
+        # UK macro
+        "bank of england", "boe", "mpc", "gilt", "ftse", "sterling",
+        "pound", "uk inflation", "uk gdp", "uk jobs", "ons",
+        # European macro
+        "ecb", "eurozone", "draghi", "lagarde", "bund", "dax",
+        "german", "france", "italy", "euro", "eur",
+        # Commodities / markets
+        "oil", "energy", "opec", "gold", "copper",
+        "geopolitics", "war", "sanctions", "supply chain",
     ]
     return sum(k in text.lower() for k in keywords) / len(keywords)
 
 def classify_topic(text):
     text = text.lower()
-    if any(k in text for k in ["inflation", "cpi", "ppi"]):
+    if any(k in text for k in ["inflation", "cpi", "ppi", "rpi"]):
         return "inflation"
-    if any(k in text for k in ["fed", "ecb", "bank of england", "rates"]):
+    if any(k in text for k in ["fed", "fomc", "ecb", "bank of england", "boe", "mpc", "rates", "rate decision", "rate cut", "rate hike"]):
         return "policy"
-    if any(k in text for k in ["earnings", "profit", "revenue"]):
+    if any(k in text for k in ["earnings", "profit", "revenue", "results", "outlook"]):
         return "earnings"
-    if any(k in text for k in ["war", "geopolitics", "conflict"]):
+    if any(k in text for k in ["war", "geopolitics", "conflict", "sanctions", "ukraine", "middle east", "nato"]):
         return "geopolitics"
-    if any(k in text for k in ["oil", "energy", "gas"]):
+    if any(k in text for k in ["oil", "energy", "gas", "opec", "brent", "wti"]):
         return "energy"
+    if any(k in text for k in ["uk", "ftse", "sterling", "pound", "gilt", "chancellor", "budget"]):
+        return "uk"
+    if any(k in text for k in ["euro", "eurozone", "ecb", "bund", "dax", "german", "france"]):
+        return "europe"
+    if any(k in text for k in ["china", "pmi", "manufacturing", "trade", "tariff"]):
+        return "growth"
     return "other"
 
 def should_escalate(sentiment, relevance):
@@ -76,14 +92,24 @@ def process_headline(headline):
     }
 
 # --- News Fetching via GNews ---
-def fetch_gnews():
-    """
-    GNews API — free tier allows 100 requests/day, works from Streamlit Cloud.
-    """
+# We fetch from three regions to give good UK morning coverage:
+# GB (UK), US (global business), and EU (European macro)
+# GNews free tier = 100 requests/day, so 3 requests per pipeline run
+# At 55-minute intervals that is ~80 requests/day — within limit.
+
+GNEWS_SOURCES = [
+    {"country": "gb", "label": "UK",     "max": 5},   # UK news — fresh at 7am London
+    {"country": "us", "label": "US",     "max": 5},   # US business headlines
+    {"country": "de", "label": "Europe", "max": 3},   # German/European macro proxy
+]
+
+def _fetch_gnews_region(country: str, max_articles: int, label: str) -> list:
+    """Fetch top business headlines for a specific country/region."""
     try:
         url = (
             "https://gnews.io/api/v4/top-headlines"
-            f"?category=business&lang=en&max=10&apikey={GNEWS_KEY}"
+            f"?category=business&lang=en&country={country}"
+            f"&max={max_articles}&apikey={GNEWS_KEY}"
         )
         resp = requests.get(url, timeout=10)
         resp.raise_for_status()
@@ -101,16 +127,40 @@ def fetch_gnews():
             except Exception:
                 pass
             articles.append({
-                "source":   a.get("source", {}).get("name", "Unknown"),
+                "source":   f"[{label}] {a.get('source', {}).get('name', 'Unknown')}",
                 "headline": a["title"],
                 "date":     a["publishedAt"],
-                "url":      a.get("url", "")
+                "url":      a.get("url", ""),
+                "region":   label,
             })
-        print(f"[GNews] Fetched {len(articles)} articles.")
+        print(f"[GNews/{label}] Fetched {len(articles)} articles.")
         return articles
     except Exception as e:
-        print(f"[GNews error] {e}")
+        print(f"[GNews/{label} error] {e}")
         return []
+
+
+def fetch_gnews():
+    """Fetch from UK, US, and European sources and deduplicate by headline."""
+    all_articles = []
+    seen_headlines = set()
+
+    for source in GNEWS_SOURCES:
+        articles = _fetch_gnews_region(
+            country=source["country"],
+            max_articles=source["max"],
+            label=source["label"]
+        )
+        for a in articles:
+            # Deduplicate on headline text across regions
+            key = a["headline"].strip().lower()[:80]
+            if key not in seen_headlines:
+                seen_headlines.add(key)
+                all_articles.append(a)
+
+    print(f"[GNews] Total unique articles: {len(all_articles)}")
+    return all_articles
+
 
 def fetch_all_sources():
     return fetch_gnews()
