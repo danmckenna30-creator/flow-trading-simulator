@@ -3215,12 +3215,16 @@ with tabs[7]:
             by_cat.setdefault(s["category"], []).append(s["score"])
             by_level.setdefault(s.get("level",""), []).append(s["score"])
 
-        # Identify weak spots — category + level combinations
+        # Identify weak spots — prefer self-rated scores where available
         cat_avgs   = {c: round(sum(v)/len(v), 1) for c, v in by_cat.items()}
         level_avgs = {l: round(sum(v)/len(v), 1) for l, v in by_level.items() if l}
         best_cat   = max(cat_avgs, key=cat_avgs.get) if cat_avgs else "—"
         weak_cat   = min(cat_avgs, key=cat_avgs.get) if cat_avgs else "—"
         weak_level = min(level_avgs, key=level_avgs.get) if level_avgs else "—"
+
+        # Flag self-rated vs GPT-rated in progress view
+        self_rated_count = sum(1 for s in scores if s.get("self_rated"))
+        gpt_rated_count  = total - self_rated_count
 
         # Last 3 questions for context
         recent_scores = scores[-3:]
@@ -3290,19 +3294,21 @@ with tabs[7]:
 
         if last_weak:
             if last_weak:
-                weak_q = last_weak.get("question", "")
-                weak_s = last_weak.get("score", 0)
-                weak_l = last_weak.get("level", "")
-                weak_c = last_weak.get("category", "")
+                weak_q  = last_weak.get("question", "")
+                weak_s  = last_weak.get("score", 0)
+                weak_l  = last_weak.get("level", "")
+                weak_c  = last_weak.get("category", "")
+                is_self = last_weak.get("self_rated", False)
+                rating_label = "self-rated" if is_self else "GPT-rated"
                 st.markdown(
                     f'<div class="card" style="border-left:3px solid #FFDC00;">'
-                    f'<div style="color:#FFDC00; font-size:12px; font-weight:bold;">⚠️ WEAK SPOT DETECTED</div>'
+                    f'<div style="color:#FFDC00; font-size:12px; font-weight:bold;">⚠️ WEAK SPOT DETECTED ({rating_label})</div>'
                     f'<div style="color:#DDDDDD; font-size:13px; margin-top:4px;">'
                     f'You scored <strong>{weak_s}/10</strong> on a <strong>{weak_l} {weak_c}</strong> question: "{weak_q}..."'
                     '</div></div>',
                     unsafe_allow_html=True
                 )
-                lesson_context = f"Category: {weak_c} | Level: {weak_l} | Question: {weak_q}"
+                lesson_context = f"Category: {weak_c} | Level: {weak_l} | Question: {weak_q} | Score: {weak_s}/10 ({rating_label})"
         else:
             # No low scores — teach the weakest category
             lesson_context = f"Category: {weak_cat} | Level: {weak_level} | Average score: {cat_avgs.get(weak_cat, 5)}/10"
@@ -3488,6 +3494,36 @@ VERDICT:
 
             if "qf_feedback" in st.session_state:
                 st.markdown(f"<div class='card' style='line-height:1.8; white-space:pre-wrap; color:#DDDDDD;'>{st.session_state['qf_feedback']}</div>", unsafe_allow_html=True)
+
+                # Self-rating — overrides GPT score for lesson targeting
+                st.markdown("---")
+                st.markdown("**How well did you actually know that?**")
+                st.caption("Your honest self-assessment is used for the adaptive lesson — GPT scoring can be harsh. Override it here.")
+
+                self_rating = st.select_slider(
+                    "My confidence level on this topic:",
+                    options=[
+                        "1 — Had no idea",
+                        "2 — Very shaky",
+                        "3 — Partial knowledge",
+                        "4 — Knew most of it",
+                        "5 — Knew it well",
+                    ],
+                    value=st.session_state.get("qf_self_rating", "3 — Partial knowledge"),
+                    key="qf_self_rating_slider"
+                )
+
+                self_score = int(self_rating.split(" — ")[0]) * 2  # convert 1-5 to 2-10 scale
+
+                if st.button("✅ Save My Rating", key="save_self_rating"):
+                    # Update the last score entry with self-assessed score
+                    if st.session_state.get("prep_scores"):
+                        last = st.session_state["prep_scores"][-1]
+                        last["score"]      = self_score
+                        last["self_rated"] = True
+                        st.session_state["prep_scores"][-1] = last
+                    st.success(f"Saved! Your rating: {self_rating}")
+                    st.rerun()
 
     # ══════════════════════════════════════════════════════════
     # MODE 2: TOPIC DRILL
