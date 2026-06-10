@@ -360,12 +360,6 @@ def render_flow_trading_tab():
 
     # ── RISK PARAMETERS SIDEBAR ─────────────────────────────────
     with st.sidebar:
-        # User info + logout
-        _user = st.session_state.get("username", "")
-        st.markdown(f"👤 **{_user}**")
-        if st.button("Sign Out", key="logout_btn"):
-            st.session_state["_logging_out"] = True
-            st.rerun()
         st.markdown("---")
         st.markdown("## ⚙️ Risk Parameters")
         st.caption("Tune the simulation to reflect different market conditions.")
@@ -713,14 +707,10 @@ To reduce inventory risk, you hedge — placing an offsetting trade in the marke
 
 
 # ══════════════════════════════════════════════════════════════
-# AUTHENTICATION — simple password login, persists via session
+# AUTHENTICATION — optional, sidebar-based, guest mode default
 # ══════════════════════════════════════════════════════════════
-def _check_login():
-    """Returns True if user is logged in, False otherwise."""
-    return st.session_state.get("logged_in", False)
 
 def _do_login(username: str, password: str) -> bool:
-    """Check credentials against Streamlit secrets."""
     try:
         users = st.secrets.get("users", {})
         return users.get(username.lower().strip()) == password
@@ -728,7 +718,6 @@ def _do_login(username: str, password: str) -> bool:
         return False
 
 def _load_user_session(username: str):
-    """Load all persisted data for this user into session state."""
     try:
         from sheets_db import load_all_user_data
         data = load_all_user_data(username)
@@ -741,7 +730,6 @@ def _load_user_session(username: str):
         print(f"[Auth] Load error: {e}")
 
 def _save_user_session(username: str):
-    """Persist key session data for this user to Sheets."""
     try:
         from sheets_db import save_user_data
         if "prep_scores" in st.session_state:
@@ -751,13 +739,45 @@ def _save_user_session(username: str):
     except Exception as e:
         print(f"[Auth] Save error: {e}")
 
-# Show login screen if not authenticated
+# ── Initialise auth state ──
+if "auth_state" not in st.session_state:
+    st.session_state["auth_state"] = "guest"
 
-# ── Handle logout cleanly ──
-if st.session_state.get("_logging_out"):
-    for k in list(st.session_state.keys()):
-        del st.session_state[k]
-    st.rerun()
+# ── Sidebar login / user panel ──
+with st.sidebar:
+    if st.session_state["auth_state"] == "signed_in":
+        uname = st.session_state.get("username", "")
+        st.markdown(f"👤 **{uname}**")
+        st.caption("✅ Progress is being saved")
+        if st.button("Sign Out", key="logout_btn"):
+            # Clear everything and reset to guest
+            keys_to_clear = list(st.session_state.keys())
+            for k in keys_to_clear:
+                del st.session_state[k]
+            st.session_state["auth_state"] = "guest"
+            st.rerun()
+    else:
+        st.markdown("### 👤 Sign In")
+        st.caption("Sign in to save your progress. Or continue as guest.")
+        with st.form("sidebar_login"):
+            _un = st.text_input("Username", key="sb_username")
+            _pw = st.text_input("Password", type="password", key="sb_password")
+            c1, c2 = st.columns(2)
+            with c1:
+                _sign_in = st.form_submit_button("Sign In", type="primary", use_container_width=True)
+            with c2:
+                _guest = st.form_submit_button("Guest", use_container_width=True)
+            if _sign_in:
+                if _do_login(_un, _pw):
+                    st.session_state["auth_state"] = "signed_in"
+                    st.session_state["username"]   = _un.lower().strip()
+                    _load_user_session(st.session_state["username"])
+                    st.rerun()
+                else:
+                    st.error("Incorrect credentials.")
+            if _guest:
+                st.session_state["auth_state"] = "guest"
+                st.rerun()
 
 # ── Auto-save on every run if signed in ──
 _current_user = st.session_state.get("username", "")
