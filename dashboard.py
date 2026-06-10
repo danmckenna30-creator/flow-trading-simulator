@@ -364,8 +364,7 @@ def render_flow_trading_tab():
         _user = st.session_state.get("username", "")
         st.markdown(f"👤 **{_user}**")
         if st.button("Sign Out", key="logout_btn"):
-            for k in list(st.session_state.keys()):
-                del st.session_state[k]
+            st.session_state["_logging_out"] = True
             st.rerun()
         st.markdown("---")
         st.markdown("## ⚙️ Risk Parameters")
@@ -754,9 +753,15 @@ def _save_user_session(username: str):
 
 # Show login screen if not authenticated
 
-# ── Auto-save on every run (lightweight — only writes if data changed) ──
+# ── Handle logout cleanly ──
+if st.session_state.get("_logging_out"):
+    for k in list(st.session_state.keys()):
+        del st.session_state[k]
+    st.rerun()
+
+# ── Auto-save on every run if signed in ──
 _current_user = st.session_state.get("username", "")
-if _current_user:
+if _current_user and st.session_state.get("auth_state") == "signed_in":
     _save_user_session(_current_user)
 
 # ---------- TABS INITIALIZATION ----------
