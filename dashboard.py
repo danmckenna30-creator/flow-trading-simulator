@@ -753,33 +753,6 @@ def _save_user_session(username: str):
         print(f"[Auth] Save error: {e}")
 
 # Show login screen if not authenticated
-if not _check_login():
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    col_l, col_m, col_r = st.columns([1, 1.5, 1])
-    with col_m:
-        st.markdown(
-            "<div style='text-align:center; margin-bottom:32px;'>"
-            "<div style='font-size:36px;'>📈</div>"
-            "<div style='font-size:28px; font-weight:bold; color:#FFFFFF;'>Macro Terminal</div>"
-            "<div style='font-size:14px; color:#888; margin-top:4px;'>Sign in to access your dashboard</div>"
-            "</div>",
-            unsafe_allow_html=True
-        )
-        with st.form("login_form"):
-            username = st.text_input("Username", placeholder="Enter your username")
-            password = st.text_input("Password", type="password", placeholder="Enter your password")
-            submitted = st.form_submit_button("Sign In", type="primary", use_container_width=True)
-
-            if submitted:
-                if _do_login(username, password):
-                    st.session_state["logged_in"]  = True
-                    st.session_state["username"]   = username.lower().strip()
-                    _load_user_session(st.session_state["username"])
-                    st.success(f"Welcome back, {username}! Loading your dashboard...")
-                    st.rerun()
-                else:
-                    st.error("Incorrect username or password.")
-    st.stop()
 
 # ── Auto-save on every run (lightweight — only writes if data changed) ──
 _current_user = st.session_state.get("username", "")
