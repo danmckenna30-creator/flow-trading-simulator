@@ -20,7 +20,7 @@ from story_mode import generate_story_mode
 st.set_page_config(
     page_title="Macro News Terminal",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 st.markdown("""
 <style>
@@ -360,6 +360,14 @@ def render_flow_trading_tab():
 
     # ── RISK PARAMETERS SIDEBAR ─────────────────────────────────
     with st.sidebar:
+        # User info + logout
+        _user = st.session_state.get("username", "")
+        st.markdown(f"👤 **{_user}**")
+        if st.button("Sign Out", key="logout_btn"):
+            for k in list(st.session_state.keys()):
+                del st.session_state[k]
+            st.rerun()
+        st.markdown("---")
         st.markdown("## ⚙️ Risk Parameters")
         st.caption("Tune the simulation to reflect different market conditions.")
         rp = st.session_state.get("risk_params", DEFAULT_RISK_PARAMS.copy())
@@ -706,11 +714,14 @@ To reduce inventory risk, you hedge — placing an offsetting trade in the marke
 
 
 # ══════════════════════════════════════════════════════════════
-# AUTHENTICATION — optional login, guest mode available
-# Sign in to persist progress across sessions/devices
+# AUTHENTICATION — simple password login, persists via session
 # ══════════════════════════════════════════════════════════════
+def _check_login():
+    """Returns True if user is logged in, False otherwise."""
+    return st.session_state.get("logged_in", False)
 
 def _do_login(username: str, password: str) -> bool:
+    """Check credentials against Streamlit secrets."""
     try:
         users = st.secrets.get("users", {})
         return users.get(username.lower().strip()) == password
@@ -718,6 +729,7 @@ def _do_login(username: str, password: str) -> bool:
         return False
 
 def _load_user_session(username: str):
+    """Load all persisted data for this user into session state."""
     try:
         from sheets_db import load_all_user_data
         data = load_all_user_data(username)
@@ -730,6 +742,7 @@ def _load_user_session(username: str):
         print(f"[Auth] Load error: {e}")
 
 def _save_user_session(username: str):
+    """Persist key session data for this user to Sheets."""
     try:
         from sheets_db import save_user_data
         if "prep_scores" in st.session_state:
@@ -739,56 +752,38 @@ def _save_user_session(username: str):
     except Exception as e:
         print(f"[Auth] Save error: {e}")
 
-# Initialise auth state
-if "auth_state" not in st.session_state:
-    st.session_state["auth_state"] = "none"  # none | guest | signed_in
+# Show login screen if not authenticated
+if not _check_login():
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    col_l, col_m, col_r = st.columns([1, 1.5, 1])
+    with col_m:
+        st.markdown(
+            "<div style='text-align:center; margin-bottom:32px;'>"
+            "<div style='font-size:36px;'>📈</div>"
+            "<div style='font-size:28px; font-weight:bold; color:#FFFFFF;'>Macro Terminal</div>"
+            "<div style='font-size:14px; color:#888; margin-top:4px;'>Sign in to access your dashboard</div>"
+            "</div>",
+            unsafe_allow_html=True
+        )
+        with st.form("login_form"):
+            username = st.text_input("Username", placeholder="Enter your username")
+            password = st.text_input("Password", type="password", placeholder="Enter your password")
+            submitted = st.form_submit_button("Sign In", type="primary", use_container_width=True)
 
-# Show sign-in prompt in sidebar (non-blocking)
-with st.sidebar:
-    if st.session_state["auth_state"] == "signed_in":
-        uname = st.session_state.get("username", "")
-        st.markdown(f"👤 **{uname}**")
-        st.caption("✅ Progress is being saved")
-        if st.button("Sign Out", key="logout_btn"):
-            for k in list(st.session_state.keys()):
-                del st.session_state[k]
-            st.rerun()
-    else:
-        if st.session_state["auth_state"] == "none":
-            st.markdown("### 👤 Sign In")
-            st.caption("Sign in to save your progress across sessions and devices. Or continue as guest.")
-            with st.form("sidebar_login"):
-                _un = st.text_input("Username", key="sb_username")
-                _pw = st.text_input("Password", type="password", key="sb_password")
-                c1, c2 = st.columns(2)
-                with c1:
-                    sign_in = st.form_submit_button("Sign In", type="primary", use_container_width=True)
-                with c2:
-                    guest = st.form_submit_button("Guest", use_container_width=True)
-
-                if sign_in:
-                    if _do_login(_un, _pw):
-                        st.session_state["auth_state"] = "signed_in"
-                        st.session_state["username"]   = _un.lower().strip()
-                        _load_user_session(st.session_state["username"])
-                        st.success(f"Welcome back, {_un}!")
-                        st.rerun()
-                    else:
-                        st.error("Incorrect credentials.")
-                if guest:
-                    st.session_state["auth_state"] = "guest"
+            if submitted:
+                if _do_login(username, password):
+                    st.session_state["logged_in"]  = True
+                    st.session_state["username"]   = username.lower().strip()
+                    _load_user_session(st.session_state["username"])
+                    st.success(f"Welcome back, {username}! Loading your dashboard...")
                     st.rerun()
-        else:
-            # Guest mode
-            st.markdown("👤 **Guest Mode**")
-            st.caption("Progress won't be saved. Sign in to persist your data.")
-            if st.button("Sign In", key="guest_signin_btn"):
-                st.session_state["auth_state"] = "none"
-                st.rerun()
+                else:
+                    st.error("Incorrect username or password.")
+    st.stop()
 
-# Auto-save on every run if signed in
+# ── Auto-save on every run (lightweight — only writes if data changed) ──
 _current_user = st.session_state.get("username", "")
-if _current_user and st.session_state.get("auth_state") == "signed_in":
+if _current_user:
     _save_user_session(_current_user)
 
 # ---------- TABS INITIALIZATION ----------
