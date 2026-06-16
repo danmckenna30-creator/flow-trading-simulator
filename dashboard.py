@@ -1326,21 +1326,25 @@ with tabs[0]:
     # Auto-refresh trigger every 60 mins
     st_autorefresh(interval=60 * 60 * 1000, key="macro_refresh")
 
-    # Only run pipeline if data is stale or missing
-    last_run = st.session_state.get("last_pipeline_run")
-    now = datetime.now(pytz.UTC)
-    should_run = (
-        last_run is None or
-        (now - last_run).total_seconds() > 3300  # 55 minutes
-    )
+    # Only run pipeline if data is stale or missing.
+    # Uses st.cache_data (server-wide, shared across ALL sessions) rather than
+    # session_state (per-session, resets on every new tab/reconnect), so a new
+    # visitor or a dropped/reconnected websocket doesn't re-trigger the full
+    # news + GPT + Sheets pipeline from scratch.
+    @st.cache_data(ttl=3300)  # 55 minutes
+    def _run_pipeline_gated(_bucket: int):
+        run_pipeline()
+        return True
 
-    if should_run:
+    try:
         with st.spinner("Fetching latest news and sentiment..."):
-            try:
-                run_pipeline()
-                st.session_state["last_pipeline_run"] = now
-            except Exception as e:
-                st.warning(f"Pipeline error: {e}")
+            # _bucket changes once per 55-minute window, so this only
+            # actually executes run_pipeline() once per window, server-wide,
+            # no matter how many sessions/tabs hit this line in between.
+            _bucket = int(datetime.now(pytz.UTC).timestamp() // 3300)
+            _run_pipeline_gated(_bucket)
+    except Exception as e:
+        st.warning(f"Pipeline error: {e}")
 
     news_df = load_news()
     gpt = load_gpt()

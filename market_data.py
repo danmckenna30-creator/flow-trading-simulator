@@ -35,6 +35,7 @@ TICKERS = {
 }
 
 
+@st.cache_data(ttl=30)
 def get_market_data():
     data = {}
 
