@@ -158,6 +158,7 @@ DEFAULT_RISK_PARAMS = {
     "overnight_vol_scale": 1.5,
     "max_lean_bps":        5.0,
     "max_view_skew_bps":   5.0,
+    "quote_sensitivity":   2.0,
 }
 
 VIEW_OPTIONS = {
@@ -209,6 +210,7 @@ def init_flow_state():
         "asset_views":    {k: 0.0 for k in FLOW_ASSETS},
         "view_weight":    0.0,
         "comparison_pnl": {"spread_inventory_only": 0.0, "spread_blended": 0.0},
+        "quoting_mode":   "auto",
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -294,6 +296,16 @@ def _compute_blended_spread(asset_label, side, notional, inv, rp):
     }
 
 
+def _compute_win_prob(quoted_bps, ref_bps, k):
+    """P(client deals) given quoted vs reference spread.
+    Logistic decay: 73% at reference, 50% at 1.5× reference, 27% at 2× reference.
+    k controls steepness (default 2.0 from quote_sensitivity risk param).
+    """
+    import math
+    ref_bps = max(ref_bps, 0.1)
+    return 1.0 / (1.0 + math.exp(k * (quoted_bps / ref_bps - 1.5)))
+
+
 def _compute_hedge_cost(asset_label, hedge_side, hedge_notional, rp):
     """
     Risk 1-3, 5: Compute realistic all-in hedge cost.
@@ -326,15 +338,23 @@ def _compute_hedge_cost(asset_label, hedge_side, hedge_notional, rp):
     }
 
 
-def add_client_trade(asset_label, side, notional, is_toxic=False):
-    """Record trade with all risk mechanics applied."""
+def add_client_trade(asset_label, side, notional, is_toxic=False, override_spread_bps=None):
+    """Record trade with all risk mechanics applied.
+
+    override_spread_bps: if set (manual quote mode), use this instead of the
+    auto-computed blended spread for spread_earned. Inventory, hedging, and
+    toxic-flow logic are unaffected.
+    """
     import random
     rp  = _get_risk_params()
     inv = st.session_state["inventory"]
 
-    # Compute spread under both skew models BEFORE updating inventory
-    skew          = _compute_blended_spread(asset_label, side, notional, inv, rp)
-    spread_earned = skew["spread_blended_usd"]
+    # Compute blended spread BEFORE updating inventory (used for comparison
+    # tracking regardless of mode; overridden below for manual quotes)
+    skew = _compute_blended_spread(asset_label, side, notional, inv, rp)
+    spread_earned = (round(notional * override_spread_bps / 10_000, 2)
+                     if override_spread_bps is not None
+                     else skew["spread_blended_usd"])
     st.session_state["pnl"]["spread_pnl"] += spread_earned
 
     # Track running comparison P&L
@@ -368,7 +388,8 @@ def add_client_trade(asset_label, side, notional, is_toxic=False):
         "notional":        notional,
         "spread_earned":   round(spread_earned, 2),
         "spread_inv_only": round(skew["spread_inv_only_usd"], 2),
-        "eff_bps":         skew["eff_blended_bps"],
+        "eff_bps":         round(override_spread_bps, 3) if override_spread_bps is not None else skew["eff_blended_bps"],
+        "ref_bps":         skew["eff_blended_bps"],
         "inv_lean_bps":    skew["inv_lean_bps"],
         "view_skew_bps":   skew["view_skew_bps"],
         "toxic":           actual_toxic,
@@ -473,6 +494,11 @@ def render_flow_trading_tab():
                                             help="Max bps the quote leans due to inventory. 0 = no inventory skew.")
         rp["max_view_skew_bps"] = st.slider("Max View Skew (bps)",      0.0, 20.0, float(rp.get("max_view_skew_bps", 5.0)), 0.5,
                                             help="Max bps the quote shifts from a full ±1 directional view.")
+        st.markdown("**Manual Quoting**")
+        rp["quote_sensitivity"] = st.slider(
+            "Quote Sensitivity (k)", 0.5, 5.0, float(rp.get("quote_sensitivity", 2.0)), 0.1,
+            help="Steepness of win-probability decay with wider quotes. k=2: 73% at ref, 50% at 1.5× ref, 27% at 2× ref. Higher = sharper cliff."
+        )
         st.session_state["risk_params"] = rp
         st.markdown("---")
         st.markdown("#### 👁️ View Weight")
@@ -535,7 +561,16 @@ def render_flow_trading_tab():
     st.markdown("---")
 
     # ── AUTO-GENERATE CLIENT ORDER ───────────────────────────────
-    st.markdown("### 📞 Incoming Client Order")
+    _hdr_col, _toggle_col = st.columns([3, 1])
+    with _hdr_col:
+        st.markdown("### 📞 Incoming Client Order")
+    with _toggle_col:
+        _manual_mode = st.toggle(
+            "Manual Quote", value=st.session_state.get("quoting_mode", "auto") == "manual",
+            key="quoting_mode_toggle",
+            help="Auto: system sets your spread automatically. Manual: you set your own spread and face a win-probability draw."
+        )
+        st.session_state["quoting_mode"] = "manual" if _manual_mode else "auto"
     st.caption("A client order has arrived. Read the context, decide whether to accept it, and if so at what size. In real life you have seconds to decide — the market is moving.")
 
     # Generate or retrieve current order
@@ -579,7 +614,7 @@ def render_flow_trading_tab():
     est_cost       = _compute_hedge_cost(order["asset"], "Buy" if direction < 0 else "Sell", order["notional"], rp) if asset_info else {}
     est_net        = spread_earned - est_cost.get("total_cost_usd", 0)
 
-    # Lean breakdown label
+    # Lean breakdown label (used in both modes)
     _lean_parts = []
     if inv_lean_prev != 0:
         _lean_parts.append(f"inv {inv_lean_prev:+.1f}bps")
@@ -587,74 +622,214 @@ def render_flow_trading_tab():
         _lean_parts.append(f"view {view_skew_prev:+.1f}bps")
     _lean_label = f"{eff_bps:.1f}bps ({'  '.join(_lean_parts) if _lean_parts else 'no lean'})"
 
-    ic1, ic2, ic3, ic4 = st.columns(4)
-    with ic1:
-        st.markdown(f"<div class='card'><div class='label'>Spread Earned</div><div class='big-number' style='color:#00ff88;'>${spread_earned:,.0f}</div><div class='label' style='font-size:10px;'>{_lean_label}</div></div>", unsafe_allow_html=True)
-    with ic2:
-        st.markdown(f"<div class='card'><div class='label'>Est. Hedge Cost</div><div class='big-number' style='color:#FFDC00;'>${est_cost.get('total_cost_usd',0):,.0f}</div><div class='label' style='font-size:10px;'>{est_cost.get('total_cost_bps',0):.1f}bps all-in</div></div>", unsafe_allow_html=True)
-    with ic3:
-        nc = "#00ff88" if est_net > 0 else "#ff4d4d"
-        st.markdown(f"<div class='card'><div class='label'>Est. Net P&L</div><div class='big-number' style='color:{nc};'>${est_net:,.0f}</div><div class='label' style='font-size:10px;'>Spread minus hedge cost</div></div>", unsafe_allow_html=True)
-    with ic4:
-        new_color = "#00ff88" if abs(new_inv) < HEDGE_THRESHOLD_USD else "#FFDC00" if abs(new_inv) < MAX_INVENTORY_USD else "#ff4d4d"
-        st.markdown(f"<div class='card'><div class='label'>Inventory After</div><div class='big-number' style='color:{new_color};'>${new_inv:,.0f}</div></div>", unsafe_allow_html=True)
+    # Reset quoted-spread slider default when a new order arrives
+    _order_key = f"{order['asset']}|{order['side']}|{order['notional']}|{len(st.session_state.get('trade_log', []))}"
+    if st.session_state.get("_active_order_key") != _order_key:
+        st.session_state["_active_order_key"] = _order_key
+        st.session_state["quoted_spread_slider"] = float(max(0.1, round(eff_bps, 2)))
 
-    if abs(new_inv) >= HEDGE_THRESHOLD_USD:
-        st.warning(f"⚠️ Accepting this trade will push your {order['asset']} position to ${abs(new_inv):,.0f} — above the $500k hedge threshold. You'll need to hedge after accepting.")
+    if st.session_state.get("quoting_mode", "auto") == "auto":
+        # ── AUTO MODE (original behavior) ────────────────────────
+        ic1, ic2, ic3, ic4 = st.columns(4)
+        with ic1:
+            st.markdown(f"<div class='card'><div class='label'>Spread Earned</div><div class='big-number' style='color:#00ff88;'>${spread_earned:,.0f}</div><div class='label' style='font-size:10px;'>{_lean_label}</div></div>", unsafe_allow_html=True)
+        with ic2:
+            st.markdown(f"<div class='card'><div class='label'>Est. Hedge Cost</div><div class='big-number' style='color:#FFDC00;'>${est_cost.get('total_cost_usd',0):,.0f}</div><div class='label' style='font-size:10px;'>{est_cost.get('total_cost_bps',0):.1f}bps all-in</div></div>", unsafe_allow_html=True)
+        with ic3:
+            nc = "#00ff88" if est_net > 0 else "#ff4d4d"
+            st.markdown(f"<div class='card'><div class='label'>Est. Net P&L</div><div class='big-number' style='color:{nc};'>${est_net:,.0f}</div><div class='label' style='font-size:10px;'>Spread minus hedge cost</div></div>", unsafe_allow_html=True)
+        with ic4:
+            new_color = "#00ff88" if abs(new_inv) < HEDGE_THRESHOLD_USD else "#FFDC00" if abs(new_inv) < MAX_INVENTORY_USD else "#ff4d4d"
+            st.markdown(f"<div class='card'><div class='label'>Inventory After</div><div class='big-number' style='color:{new_color};'>${new_inv:,.0f}</div></div>", unsafe_allow_html=True)
 
-    st.markdown("")
+        if abs(new_inv) >= HEDGE_THRESHOLD_USD:
+            st.warning(f"⚠️ Accepting this trade will push your {order['asset']} position to ${abs(new_inv):,.0f} — above the $500k hedge threshold. You'll need to hedge after accepting.")
 
-    # Allow size adjustment
-    accept_notional = st.slider(
-        "Adjust trade size (USD)",
-        min_value=100_000,
-        max_value=int(order["notional"] * 1.5),
-        value=int(order["notional"]),
-        step=100_000,
-        format="$%d"
-    )
+        st.markdown("")
+        accept_notional = st.slider(
+            "Adjust trade size (USD)", min_value=100_000, max_value=int(order["notional"] * 1.5),
+            value=int(order["notional"]), step=100_000, format="$%d", key="size_slider_auto"
+        )
 
-    col_acc, col_rej, col_new = st.columns(3)
-    with col_acc:
-        if st.button("✅ Accept Trade", type="primary"):
-            _result = add_client_trade(order["asset"], order["side"], accept_notional)
-            _skew   = _result.get("skew", {})
-            st.session_state["order_accepted"] = True
-            st.session_state["trade_log"] = st.session_state.get("trade_log", [])
-            st.session_state["trade_log"].append({
-                "time":            _dt.now().strftime("%H:%M:%S"),
-                "action":          "ACCEPTED",
-                "asset":           order["asset"],
-                "side":            order["side"],
-                "notional":        accept_notional,
-                "spread":          round(_result["spread_earned"], 2),
-                "spread_inv_only": round(_skew.get("spread_inv_only_usd", _result["spread_earned"]), 2),
-                "eff_bps":         _skew.get("eff_blended_bps", 0),
-                "inv_lean_bps":    _skew.get("inv_lean_bps", 0),
-                "view_skew_bps":   _skew.get("view_skew_bps", 0),
-                "reason":          order["reason"],
-            })
-            st.success(f"✅ Trade accepted! Spread earned: ${_result['spread_earned']:,.0f}")
-            st.rerun()
-    with col_rej:
-        if st.button("❌ Reject Trade"):
-            st.session_state["order_rejected"] = True
-            st.session_state["trade_log"] = st.session_state.get("trade_log", [])
-            st.session_state["trade_log"].append({
-                "time":     _dt.now().strftime("%H:%M:%S"),
-                "action":   "REJECTED",
-                "asset":    order["asset"],
-                "side":     order["side"],
-                "notional": order["notional"],
-                "spread":   0,
-                "reason":   order["reason"]
-            })
-            st.info("Order rejected. Next client order incoming...")
-            st.rerun()
-    with col_new:
-        if st.button("🔄 New Order"):
-            del st.session_state["current_order"]
-            st.rerun()
+        col_acc, col_rej, col_new = st.columns(3)
+        with col_acc:
+            if st.button("✅ Accept Trade", type="primary", key="btn_accept_auto"):
+                _result = add_client_trade(order["asset"], order["side"], accept_notional)
+                _skew   = _result.get("skew", {})
+                st.session_state["order_accepted"] = True
+                st.session_state["trade_log"] = st.session_state.get("trade_log", [])
+                st.session_state["trade_log"].append({
+                    "time":            _dt.now().strftime("%H:%M:%S"),
+                    "action":          "ACCEPTED",
+                    "asset":           order["asset"],
+                    "side":            order["side"],
+                    "notional":        accept_notional,
+                    "spread":          round(_result["spread_earned"], 2),
+                    "spread_inv_only": round(_skew.get("spread_inv_only_usd", _result["spread_earned"]), 2),
+                    "eff_bps":         _skew.get("eff_blended_bps", 0),
+                    "inv_lean_bps":    _skew.get("inv_lean_bps", 0),
+                    "view_skew_bps":   _skew.get("view_skew_bps", 0),
+                    "reason":          order["reason"],
+                })
+                st.success(f"✅ Trade accepted! Spread earned: ${_result['spread_earned']:,.0f}")
+                st.rerun()
+        with col_rej:
+            if st.button("❌ Reject Trade", key="btn_reject_auto"):
+                st.session_state["order_rejected"] = True
+                st.session_state["trade_log"] = st.session_state.get("trade_log", [])
+                st.session_state["trade_log"].append({
+                    "time":     _dt.now().strftime("%H:%M:%S"),
+                    "action":   "REJECTED",
+                    "asset":    order["asset"],
+                    "side":     order["side"],
+                    "notional": order["notional"],
+                    "spread":   0,
+                    "reason":   order["reason"],
+                })
+                st.info("Order rejected. Next client order incoming...")
+                st.rerun()
+        with col_new:
+            if st.button("🔄 New Order", key="btn_new_auto"):
+                del st.session_state["current_order"]
+                st.rerun()
+
+    else:
+        # ── MANUAL QUOTE MODE ────────────────────────────────────
+        st.markdown(
+            f"<div class='card' style='border-left:4px solid #FFDC00; padding:12px;'>"
+            f"<div class='label'>Reference Spread — auto-computed, for guidance only</div>"
+            f"<div style='font-size:20px; font-weight:bold; color:#FFDC00;'>"
+            f"{eff_bps:.2f} bps &nbsp;·&nbsp; ${spread_earned:,.0f}</div>"
+            f"<div class='label' style='font-size:10px;'>{_lean_label}</div>"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+        st.markdown("")
+
+        # Size first so quoted-spread metrics reflect the adjusted notional
+        accept_notional = st.slider(
+            "Adjust trade size (USD)", min_value=100_000, max_value=int(order["notional"] * 1.5),
+            value=int(order["notional"]), step=100_000, format="$%d", key="size_slider_manual"
+        )
+
+        quoted_spread_bps = st.slider(
+            "Your Quoted Spread (bps)", min_value=0.1, max_value=20.0, step=0.05,
+            key="quoted_spread_slider",
+            help="Set the spread you want to charge the client. Tighter → higher win prob, less P&L per trade. Wider → lower win prob, more P&L if you win."
+        )
+
+        _k        = rp.get("quote_sensitivity", 2.0)
+        win_prob  = _compute_win_prob(quoted_spread_bps, eff_bps, _k)
+        quoted_usd = accept_notional * quoted_spread_bps / 10_000
+        # Scale hedge cost estimate proportionally to accept_notional
+        _hedge_usd = (est_cost.get("total_cost_usd", 0)
+                      * accept_notional / order["notional"]
+                      if order["notional"] > 0 else 0)
+        exp_net   = win_prob * (quoted_usd - _hedge_usd)
+        _new_inv_adj = current_inv + direction * accept_notional
+
+        mc1, mc2, mc3, mc4 = st.columns(4)
+        with mc1:
+            _wp_col = "#00ff88" if win_prob > 0.65 else "#FFDC00" if win_prob > 0.35 else "#ff4d4d"
+            st.markdown(
+                f"<div class='card'><div class='label'>Win Probability</div>"
+                f"<div class='big-number' style='color:{_wp_col};'>{win_prob*100:.0f}%</div>"
+                f"<div class='label' style='font-size:10px;'>"
+                f"{quoted_spread_bps:.2f} bps quoted vs {eff_bps:.2f} bps ref</div></div>",
+                unsafe_allow_html=True
+            )
+        with mc2:
+            st.markdown(
+                f"<div class='card'><div class='label'>If-Win Spread</div>"
+                f"<div class='big-number' style='color:#00ff88;'>${quoted_usd:,.0f}</div>"
+                f"<div class='label' style='font-size:10px;'>{quoted_spread_bps:.2f} bps × ${accept_notional:,.0f}</div></div>",
+                unsafe_allow_html=True
+            )
+        with mc3:
+            _en_col = "#00ff88" if exp_net > 0 else "#ff4d4d"
+            st.markdown(
+                f"<div class='card'><div class='label'>Expected Net P&L</div>"
+                f"<div class='big-number' style='color:{_en_col};'>${exp_net:,.0f}</div>"
+                f"<div class='label' style='font-size:10px;'>P(win) × (spread − hedge)</div></div>",
+                unsafe_allow_html=True
+            )
+        with mc4:
+            _ni_col = "#00ff88" if abs(_new_inv_adj) < HEDGE_THRESHOLD_USD else "#FFDC00" if abs(_new_inv_adj) < MAX_INVENTORY_USD else "#ff4d4d"
+            st.markdown(
+                f"<div class='card'><div class='label'>Inventory If Win</div>"
+                f"<div class='big-number' style='color:{_ni_col};'>${_new_inv_adj:,.0f}</div></div>",
+                unsafe_allow_html=True
+            )
+
+        if abs(_new_inv_adj) >= HEDGE_THRESHOLD_USD:
+            st.warning(f"⚠️ If the client deals, your {order['asset']} position will reach ${abs(_new_inv_adj):,.0f} — above the $500k hedge threshold.")
+
+        st.markdown("")
+        col_q, col_p, col_n = st.columns(3)
+        with col_q:
+            if st.button("📤 Quote & Submit", type="primary", key="btn_quote_manual"):
+                import random as _rand
+                _won = _rand.random() < win_prob
+                st.session_state["trade_log"] = st.session_state.get("trade_log", [])
+                if _won:
+                    _result = add_client_trade(
+                        order["asset"], order["side"], accept_notional,
+                        override_spread_bps=quoted_spread_bps
+                    )
+                    _skew = _result.get("skew", {})
+                    st.session_state["order_accepted"] = True
+                    st.session_state["trade_log"].append({
+                        "time":            _dt.now().strftime("%H:%M:%S"),
+                        "action":          "ACCEPTED",
+                        "asset":           order["asset"],
+                        "side":            order["side"],
+                        "notional":        accept_notional,
+                        "spread":          round(_result["spread_earned"], 2),
+                        "spread_inv_only": round(_skew.get("spread_inv_only_usd", 0), 2),
+                        "eff_bps":         round(quoted_spread_bps, 3),
+                        "quoted_bps":      round(quoted_spread_bps, 3),
+                        "ref_bps":         round(eff_bps, 3),
+                        "win_prob":        round(win_prob, 3),
+                        "inv_lean_bps":    _skew.get("inv_lean_bps", 0),
+                        "view_skew_bps":   _skew.get("view_skew_bps", 0),
+                        "reason":          order["reason"],
+                    })
+                    st.success(f"✅ Client dealt at {quoted_spread_bps:.2f} bps! Spread earned: ${_result['spread_earned']:,.0f}")
+                else:
+                    st.session_state["order_rejected"] = True
+                    st.session_state["trade_log"].append({
+                        "time":       _dt.now().strftime("%H:%M:%S"),
+                        "action":     "LOST_QUOTE",
+                        "asset":      order["asset"],
+                        "side":       order["side"],
+                        "notional":   order["notional"],
+                        "spread":     0,
+                        "quoted_bps": round(quoted_spread_bps, 3),
+                        "ref_bps":    round(eff_bps, 3),
+                        "win_prob":   round(win_prob, 3),
+                        "reason":     order["reason"],
+                    })
+                    st.error(f"❌ Client passed on your {quoted_spread_bps:.2f} bps quote. Flow went elsewhere.")
+                st.rerun()
+        with col_p:
+            if st.button("🚫 Pass on Order", key="btn_pass_manual"):
+                st.session_state["order_rejected"] = True
+                st.session_state["trade_log"] = st.session_state.get("trade_log", [])
+                st.session_state["trade_log"].append({
+                    "time":     _dt.now().strftime("%H:%M:%S"),
+                    "action":   "REJECTED",
+                    "asset":    order["asset"],
+                    "side":     order["side"],
+                    "notional": order["notional"],
+                    "spread":   0,
+                    "reason":   order["reason"],
+                })
+                st.info("Order passed. Next client order incoming...")
+                st.rerun()
+        with col_n:
+            if st.button("🔄 New Order", key="btn_new_manual"):
+                del st.session_state["current_order"]
+                st.rerun()
 
     st.markdown("---")
 
@@ -843,20 +1018,28 @@ def render_flow_trading_tab():
     trade_log = st.session_state.get("trade_log", [])
     if trade_log:
         log_df = pd.DataFrame(trade_log)
-        # Colour accepted vs rejected
+        # Colour rows: green = accepted, orange = lost quote, red = rejected
         def highlight_row(row):
-            color = "background-color: rgba(0,255,136,0.08)" if row["action"] == "ACCEPTED" else "background-color: rgba(255,77,77,0.08)"
+            if row["action"] == "ACCEPTED":
+                color = "background-color: rgba(0,255,136,0.08)"
+            elif row["action"] == "LOST_QUOTE":
+                color = "background-color: rgba(255,165,0,0.10)"
+            else:
+                color = "background-color: rgba(255,77,77,0.08)"
             return [color] * len(row)
         st.dataframe(log_df.style.apply(highlight_row, axis=1), use_container_width=True, hide_index=True)
-        accepted = sum(1 for t in trade_log if t["action"] == "ACCEPTED")
-        rejected = sum(1 for t in trade_log if t["action"] == "REJECTED")
+        accepted     = sum(1 for t in trade_log if t["action"] == "ACCEPTED")
+        rejected     = sum(1 for t in trade_log if t["action"] == "REJECTED")
+        lost_quotes  = sum(1 for t in trade_log if t["action"] == "LOST_QUOTE")
         total_spread = sum(t.get("spread", 0) for t in trade_log)
-        dl1, dl2, dl3 = st.columns(3)
+        dl1, dl2, dl3, dl4 = st.columns(4)
         with dl1:
-            st.markdown(f"<div class='card'><div class='label'>Orders Accepted</div><div class='big-number' style='color:#00ff88;'>{accepted}</div></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='card'><div class='label'>Accepted</div><div class='big-number' style='color:#00ff88;'>{accepted}</div></div>", unsafe_allow_html=True)
         with dl2:
-            st.markdown(f"<div class='card'><div class='label'>Orders Rejected</div><div class='big-number' style='color:#ff4d4d;'>{rejected}</div></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='card'><div class='label'>Rejected</div><div class='big-number' style='color:#ff4d4d;'>{rejected}</div></div>", unsafe_allow_html=True)
         with dl3:
+            st.markdown(f"<div class='card'><div class='label'>Lost Quotes</div><div class='big-number' style='color:#FFA500;'>{lost_quotes}</div></div>", unsafe_allow_html=True)
+        with dl4:
             st.markdown(f"<div class='card'><div class='label'>Total Spread Earned</div><div class='big-number' style='color:#00ff88;'>${total_spread:,.0f}</div></div>", unsafe_allow_html=True)
     else:
         st.info("No trades yet — accept or reject the incoming client order above.")
