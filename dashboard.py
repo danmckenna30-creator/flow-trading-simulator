@@ -156,6 +156,16 @@ DEFAULT_RISK_PARAMS = {
     "toxic_flow_prob":     0.20,
     "toxic_jump_bps":      15.0,
     "overnight_vol_scale": 1.5,
+    "max_lean_bps":        5.0,
+    "max_view_skew_bps":   5.0,
+}
+
+VIEW_OPTIONS = {
+    "🔴 Bearish":    -1.0,
+    "🟠 Lean Short": -0.5,
+    "⚪ Neutral":     0.0,
+    "🟡 Lean Long":  +0.5,
+    "🟢 Bullish":    +1.0,
 }
 
 CLIENT_ORDER_SCENARIOS = [
@@ -196,6 +206,9 @@ def init_flow_state():
             "toxic_pnl":     0.0,
             "overnight_pnl": 0.0,
         },
+        "asset_views":    {k: 0.0 for k in FLOW_ASSETS},
+        "view_weight":    0.0,
+        "comparison_pnl": {"spread_inventory_only": 0.0, "spread_blended": 0.0},
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -218,6 +231,67 @@ def _compute_vol_adjusted_spread(asset_info, rp):
     base_vol      = asset_info.get("base_vol", 0.01) * rp["vol_multiplier"]
     daily_vol_bps = base_vol / (252 ** 0.5) * 10_000
     return max(asset_info["spread_bps"], daily_vol_bps * 0.20)
+
+
+def _compute_inventory_lean_bps(asset_label, inv, rp):
+    """Lean in bps driven by current inventory fill.
+    Positive = we are long and want to sell (lean quote down).
+    Negative = we are short and want to buy (lean quote up).
+    """
+    net        = inv.get(asset_label, 0.0)
+    fill_ratio = max(-1.0, min(1.0, net / MAX_INVENTORY_USD))
+    return fill_ratio * rp.get("max_lean_bps", 5.0)
+
+
+def _compute_view_skew_bps(asset_label, rp):
+    """Skew in bps from trader's directional view.
+    Positive = bullish (want to be long).
+    Negative = bearish (want to be short).
+    """
+    view = st.session_state.get("asset_views", {}).get(asset_label, 0.0)
+    return view * rp.get("max_view_skew_bps", 5.0)
+
+
+def _compute_blended_spread(asset_label, side, notional, inv, rp):
+    """Compute spread earned under both skew models for one trade.
+
+    Inventory lean logic:
+      long (inv_lean > 0): earn MORE when client sells (adds to position),
+                           earn LESS when client buys (reduces position).
+    View skew logic (independent of inventory):
+      bullish (view_skew > 0): earn LESS when client sells to us
+                               (we want that long-building flow),
+                               earn MORE when client buys from us
+                               (reluctant to sell).
+
+    ds = +1 when client sells to us (we buy), -1 when client buys from us (we sell).
+    """
+    base_bps  = _compute_vol_adjusted_spread(FLOW_ASSETS[asset_label], rp)
+    inv_lean  = _compute_inventory_lean_bps(asset_label, inv, rp)
+    view_skew = _compute_view_skew_bps(asset_label, rp)
+    view_wt   = st.session_state.get("view_weight", 0.0)
+
+    ds = 1 if side == "Sell" else -1   # +1 = client sells to us
+
+    inv_effect_bps  =  inv_lean  * ds   # earn more when trade adds to position
+    view_effect_bps = -view_skew * ds   # earn less when trade builds desired position
+
+    blended_effect  = (1.0 - view_wt) * inv_effect_bps + view_wt * view_effect_bps
+
+    eff_inv_bps     = max(0.0, base_bps + inv_effect_bps)
+    eff_blended_bps = max(0.0, base_bps + blended_effect)
+
+    return {
+        "spread_inv_only_usd": round(notional * eff_inv_bps     / 10_000, 2),
+        "spread_blended_usd":  round(notional * eff_blended_bps / 10_000, 2),
+        "base_bps":            round(base_bps, 2),
+        "inv_lean_bps":        round(inv_lean, 2),
+        "view_skew_bps":       round(view_skew, 2),
+        "inv_effect_bps":      round(inv_effect_bps, 2),
+        "view_effect_bps":     round(view_effect_bps, 2),
+        "eff_inv_bps":         round(eff_inv_bps, 2),
+        "eff_blended_bps":     round(eff_blended_bps, 2),
+    }
 
 
 def _compute_hedge_cost(asset_label, hedge_side, hedge_notional, rp):
@@ -253,15 +327,21 @@ def _compute_hedge_cost(asset_label, hedge_side, hedge_notional, rp):
 def add_client_trade(asset_label, side, notional, is_toxic=False):
     """Record trade with all risk mechanics applied."""
     import random
-    rp    = _get_risk_params()
-    asset = FLOW_ASSETS[asset_label]
+    rp  = _get_risk_params()
+    inv = st.session_state["inventory"]
 
-    eff_spread      = _compute_vol_adjusted_spread(asset, rp)
-    spread_earned   = notional * (eff_spread / 10_000)
+    # Compute spread under both skew models BEFORE updating inventory
+    skew          = _compute_blended_spread(asset_label, side, notional, inv, rp)
+    spread_earned = skew["spread_blended_usd"]
     st.session_state["pnl"]["spread_pnl"] += spread_earned
 
+    # Track running comparison P&L
+    comp = st.session_state.get("comparison_pnl", {"spread_inventory_only": 0.0, "spread_blended": 0.0})
+    comp["spread_inventory_only"] += skew["spread_inv_only_usd"]
+    comp["spread_blended"]        += skew["spread_blended_usd"]
+    st.session_state["comparison_pnl"] = comp
+
     direction = -1 if side == "Buy" else 1
-    inv = st.session_state["inventory"]
     inv[asset_label] = inv.get(asset_label, 0.0) + direction * notional
 
     forced_cost = 0.0
@@ -273,7 +353,7 @@ def add_client_trade(asset_label, side, notional, is_toxic=False):
         sign = 1 if inv[asset_label] > 0 else -1
         inv[asset_label] = sign * MAX_INVENTORY_USD
 
-    toxic_loss  = 0.0
+    toxic_loss   = 0.0
     actual_toxic = is_toxic and random.random() < rp["toxic_flow_prob"]
     if actual_toxic:
         jump_bps   = rp["toxic_jump_bps"] * random.uniform(0.5, 1.5)
@@ -281,15 +361,27 @@ def add_client_trade(asset_label, side, notional, is_toxic=False):
         st.session_state["pnl"]["toxic_pnl"] -= toxic_loss
 
     st.session_state["flow_trades"].append({
-        "asset": asset_label, "client_side": side, "notional": notional,
-        "spread_earned": round(spread_earned, 2), "effective_spread": round(eff_spread, 2),
-        "toxic": actual_toxic, "toxic_loss": round(toxic_loss, 2),
-        "forced_cost": round(forced_cost, 2),
+        "asset":           asset_label,
+        "client_side":     side,
+        "notional":        notional,
+        "spread_earned":   round(spread_earned, 2),
+        "spread_inv_only": round(skew["spread_inv_only_usd"], 2),
+        "eff_bps":         skew["eff_blended_bps"],
+        "inv_lean_bps":    skew["inv_lean_bps"],
+        "view_skew_bps":   skew["view_skew_bps"],
+        "toxic":           actual_toxic,
+        "toxic_loss":      round(toxic_loss, 2),
+        "forced_cost":     round(forced_cost, 2),
     })
 
-    return {"spread_earned": round(spread_earned,2), "toxic": actual_toxic,
-            "toxic_loss": round(toxic_loss,2), "forced_hedge": forced_cost>0,
-            "forced_cost": round(forced_cost,2)}
+    return {
+        "spread_earned": round(spread_earned, 2),
+        "toxic":         actual_toxic,
+        "toxic_loss":    round(toxic_loss, 2),
+        "forced_hedge":  forced_cost > 0,
+        "forced_cost":   round(forced_cost, 2),
+        "skew":          skew,
+    }
 
 
 def compute_hedge_for_inventory():
@@ -373,9 +465,70 @@ def render_flow_trading_tab():
         rp["toxic_flow_prob"]     = st.slider("Toxic Flow Probability",   0.0,  0.5,  float(rp["toxic_flow_prob"]),    0.05)
         rp["toxic_jump_bps"]      = st.slider("Toxic Jump (bps)",         5.0,  50.0, float(rp["toxic_jump_bps"]),     1.0)
         rp["overnight_vol_scale"] = st.slider("Overnight Vol Scale",      0.5,  3.0,  float(rp["overnight_vol_scale"]),0.1)
+        st.markdown("**Quote Skew**")
+        rp["max_lean_bps"]      = st.slider("Max Inventory Lean (bps)", 0.0, 20.0, float(rp.get("max_lean_bps", 5.0)),      0.5,
+                                            help="Max bps the quote leans due to inventory. 0 = no inventory skew.")
+        rp["max_view_skew_bps"] = st.slider("Max View Skew (bps)",      0.0, 20.0, float(rp.get("max_view_skew_bps", 5.0)), 0.5,
+                                            help="Max bps the quote shifts from a full ±1 directional view.")
         st.session_state["risk_params"] = rp
         st.markdown("---")
+        st.markdown("#### 👁️ View Weight")
+        st.caption("Blend between pure inventory lean (0) and pure directional view (1).")
+        _vw = st.slider("Inventory ← → View", 0.0, 1.0,
+                        float(st.session_state.get("view_weight", 0.0)), 0.05,
+                        key="view_weight_slider")
+        st.session_state["view_weight"] = _vw
+        st.markdown("---")
         st.caption(f"**Max inventory:** ${MAX_INVENTORY_USD:,.0f} | **Hedge threshold:** ${HEDGE_THRESHOLD_USD:,.0f}")
+    st.markdown("---")
+
+    # ── TRADER VIEWS ─────────────────────────────────────────────
+    _vw_pct  = int(st.session_state.get("view_weight", 0.0) * 100)
+    _inv_pct = 100 - _vw_pct
+    with st.expander(f"👁️ Trader Views — Per-Asset Directional Signals  "
+                     f"(inventory {_inv_pct}% / view {_vw_pct}%)", expanded=False):
+        st.caption(
+            "Set your directional view on each asset independently of inventory. "
+            "**Bullish** = want to be long → quote leans to attract client sell flow (earn less spread on those trades). "
+            "**Bearish** = want to be short → quote leans to attract client buy flow. "
+            "Adjust the **Inventory ← → View** slider in the sidebar to control how much weight the view carries."
+        )
+
+        if "asset_views" not in st.session_state:
+            st.session_state["asset_views"] = {k: 0.0 for k in FLOW_ASSETS}
+
+        _view_keys = list(VIEW_OPTIONS.keys())
+        _view_vals = list(VIEW_OPTIONS.values())
+
+        _categories = sorted(set(v["category"] for v in FLOW_ASSETS.values()))
+        for _cat in _categories:
+            _cat_assets = [k for k, v in FLOW_ASSETS.items() if v["category"] == _cat]
+            st.markdown(f"**{_cat}**")
+            _vcols = st.columns(min(len(_cat_assets), 4))
+            for _i, _asset in enumerate(_cat_assets):
+                with _vcols[_i % 4]:
+                    _cur_val  = st.session_state["asset_views"].get(_asset, 0.0)
+                    _cur_idx  = _view_vals.index(_cur_val) if _cur_val in _view_vals else 2
+                    _short    = _asset.split("(")[0].strip()
+                    _sel      = st.selectbox(
+                        _short, _view_keys, index=_cur_idx, key=f"view_{_asset}",
+                        label_visibility="visible"
+                    )
+                    st.session_state["asset_views"][_asset] = VIEW_OPTIONS[_sel]
+
+        # Quick summary of active non-neutral views
+        _active = {a: st.session_state["asset_views"][a]
+                   for a in FLOW_ASSETS if st.session_state["asset_views"].get(a, 0.0) != 0.0}
+        if _active:
+            _bullets = "  |  ".join(
+                f"{'🟢' if v > 0 else '🔴'} {a.split('(')[0].strip()} {'+' if v>0 else ''}{v:.1f}"
+                for a, v in _active.items()
+            )
+            st.markdown(f"<div class='card' style='font-size:12px; color:#AAAAAA;'>Active views: {_bullets}</div>",
+                        unsafe_allow_html=True)
+        else:
+            st.caption("All views neutral — quote skew is driven entirely by inventory lean.")
+
     st.markdown("---")
 
     # ── AUTO-GENERATE CLIENT ORDER ───────────────────────────────
@@ -413,15 +566,27 @@ def render_flow_trading_tab():
     new_inv       = current_inv + direction * order["notional"]
 
     st.markdown("")
-    rp = _get_risk_params()
-    eff_spread_bps = _compute_vol_adjusted_spread(asset_info, rp) if asset_info else asset_info.get("spread_bps", 1)
-    spread_earned  = order["notional"] * (eff_spread_bps / 10_000)
+    rp         = _get_risk_params()
+    prev_skew  = _compute_blended_spread(order["asset"], order["side"], order["notional"],
+                                         st.session_state["inventory"], rp) if asset_info else {}
+    spread_earned  = prev_skew.get("spread_blended_usd", 0)
+    eff_bps        = prev_skew.get("eff_blended_bps", 0)
+    inv_lean_prev  = prev_skew.get("inv_lean_bps", 0)
+    view_skew_prev = prev_skew.get("view_skew_bps", 0)
     est_cost       = _compute_hedge_cost(order["asset"], "Buy" if direction < 0 else "Sell", order["notional"], rp) if asset_info else {}
     est_net        = spread_earned - est_cost.get("total_cost_usd", 0)
 
+    # Lean breakdown label
+    _lean_parts = []
+    if inv_lean_prev != 0:
+        _lean_parts.append(f"inv {inv_lean_prev:+.1f}bps")
+    if view_skew_prev != 0 and st.session_state.get("view_weight", 0) > 0:
+        _lean_parts.append(f"view {view_skew_prev:+.1f}bps")
+    _lean_label = f"{eff_bps:.1f}bps ({'  '.join(_lean_parts) if _lean_parts else 'no lean'})"
+
     ic1, ic2, ic3, ic4 = st.columns(4)
     with ic1:
-        st.markdown(f"<div class='card'><div class='label'>Spread Earned</div><div class='big-number' style='color:#00ff88;'>${spread_earned:,.0f}</div><div class='label' style='font-size:10px;'>{eff_spread_bps:.1f}bps (vol-adjusted)</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='card'><div class='label'>Spread Earned</div><div class='big-number' style='color:#00ff88;'>${spread_earned:,.0f}</div><div class='label' style='font-size:10px;'>{_lean_label}</div></div>", unsafe_allow_html=True)
     with ic2:
         st.markdown(f"<div class='card'><div class='label'>Est. Hedge Cost</div><div class='big-number' style='color:#FFDC00;'>${est_cost.get('total_cost_usd',0):,.0f}</div><div class='label' style='font-size:10px;'>{est_cost.get('total_cost_bps',0):.1f}bps all-in</div></div>", unsafe_allow_html=True)
     with ic3:
@@ -449,19 +614,24 @@ def render_flow_trading_tab():
     col_acc, col_rej, col_new = st.columns(3)
     with col_acc:
         if st.button("✅ Accept Trade", type="primary"):
-            add_client_trade(order["asset"], order["side"], accept_notional)
+            _result = add_client_trade(order["asset"], order["side"], accept_notional)
+            _skew   = _result.get("skew", {})
             st.session_state["order_accepted"] = True
             st.session_state["trade_log"] = st.session_state.get("trade_log", [])
             st.session_state["trade_log"].append({
-                "time":     _dt.now().strftime("%H:%M:%S"),
-                "action":   "ACCEPTED",
-                "asset":    order["asset"],
-                "side":     order["side"],
-                "notional": accept_notional,
-                "spread":   round(accept_notional * asset_info.get("spread_bps", 1) / 10_000, 2),
-                "reason":   order["reason"]
+                "time":            _dt.now().strftime("%H:%M:%S"),
+                "action":          "ACCEPTED",
+                "asset":           order["asset"],
+                "side":            order["side"],
+                "notional":        accept_notional,
+                "spread":          round(_result["spread_earned"], 2),
+                "spread_inv_only": round(_skew.get("spread_inv_only_usd", _result["spread_earned"]), 2),
+                "eff_bps":         _skew.get("eff_blended_bps", 0),
+                "inv_lean_bps":    _skew.get("inv_lean_bps", 0),
+                "view_skew_bps":   _skew.get("view_skew_bps", 0),
+                "reason":          order["reason"],
             })
-            st.success(f"✅ Trade accepted! Spread earned: ${accept_notional * asset_info.get('spread_bps',1) / 10_000:,.0f}")
+            st.success(f"✅ Trade accepted! Spread earned: ${_result['spread_earned']:,.0f}")
             st.rerun()
     with col_rej:
         if st.button("❌ Reject Trade"):
@@ -528,6 +698,65 @@ def render_flow_trading_tab():
 
     total_color = "#00ff88" if total_pnl >= 0 else "#ff4d4d"
     st.markdown(f"<div class='card' style='text-align:center; margin-top:4px;'><div class='label'>TOTAL P&L</div><div class='big-number' style='color:{total_color};'>${total_pnl:,.0f}</div></div>", unsafe_allow_html=True)
+
+    st.markdown("")
+
+    # ── SKEW COMPARISON PANEL ────────────────────────────────────
+    comp = st.session_state.get("comparison_pnl", {"spread_inventory_only": 0.0, "spread_blended": 0.0})
+    _n_trades = len([t for t in st.session_state.get("flow_trades", []) if t.get("spread_earned", 0) > 0 or t.get("spread_inv_only", 0) > 0])
+    if _n_trades > 0:
+        st.markdown("#### 📊 Skew Comparison — Inventory Lean vs Blended (Inventory + View)")
+        _inv_only  = comp["spread_inventory_only"]
+        _blended   = comp["spread_blended"]
+        _view_diff = _blended - _inv_only
+        _vw        = st.session_state.get("view_weight", 0.0)
+
+        _cp1, _cp2, _cp3, _cp4 = st.columns(4)
+        with _cp1:
+            st.markdown(f"<div class='card'><div class='label'>Spread — Inventory Only</div><div class='big-number' style='color:#00c3ff;'>${_inv_only:,.0f}</div><div class='label' style='font-size:10px;'>Pure inventory lean baseline</div></div>", unsafe_allow_html=True)
+        with _cp2:
+            st.markdown(f"<div class='card'><div class='label'>Spread — Blended</div><div class='big-number' style='color:#00ff88;'>${_blended:,.0f}</div><div class='label' style='font-size:10px;'>View weight {_vw:.0%}</div></div>", unsafe_allow_html=True)
+        with _cp3:
+            _dc = "#00ff88" if _view_diff >= 0 else "#ff4d4d"
+            _dlabel = "View helped" if _view_diff >= 0 else "View hurt"
+            st.markdown(f"<div class='card'><div class='label'>View Contribution</div><div class='big-number' style='color:{_dc};'>${_view_diff:+,.0f}</div><div class='label' style='font-size:10px;'>{_dlabel} vs pure inventory</div></div>", unsafe_allow_html=True)
+        with _cp4:
+            _avg_diff = _view_diff / _n_trades if _n_trades else 0
+            _adc = "#00ff88" if _avg_diff >= 0 else "#ff4d4d"
+            st.markdown(f"<div class='card'><div class='label'>Avg per Trade</div><div class='big-number' style='color:{_adc};'>${_avg_diff:+,.0f}</div><div class='label' style='font-size:10px;'>Over {_n_trades} trades</div></div>", unsafe_allow_html=True)
+
+        # Per-trade comparison chart (cumulative)
+        _trades = st.session_state.get("flow_trades", [])
+        if len(_trades) >= 2:
+            _cum_inv     = []
+            _cum_blended = []
+            _running_inv = 0.0
+            _running_bl  = 0.0
+            for _t in _trades:
+                _running_inv += _t.get("spread_inv_only", _t.get("spread_earned", 0))
+                _running_bl  += _t.get("spread_earned", 0)
+                _cum_inv.append(_running_inv)
+                _cum_blended.append(_running_bl)
+
+            _fig_cmp = go.Figure()
+            _fig_cmp.add_trace(go.Scatter(
+                y=_cum_inv, mode="lines", name="Inventory Lean Only",
+                line=dict(color="#00c3ff", width=2, dash="dash")
+            ))
+            _fig_cmp.add_trace(go.Scatter(
+                y=_cum_blended, mode="lines", name="Inventory + View",
+                line=dict(color="#00ff88", width=2)
+            ))
+            _fig_cmp.update_layout(
+                template="plotly_dark", height=220,
+                margin=dict(l=40, r=20, t=30, b=30),
+                title="Cumulative Spread P&L — Inventory Lean vs Blended",
+                yaxis=dict(tickprefix="$", gridcolor="#333"),
+                xaxis=dict(title="Trade #", showgrid=False),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            )
+            st.plotly_chart(_fig_cmp, use_container_width=True)
+            st.caption("Blue dashed = what you would have earned using inventory lean only (no directional view). Green = actual blended result. Gap shows whether your view added or destroyed value vs pure inventory management.")
 
     st.markdown("")
 
@@ -598,7 +827,8 @@ def render_flow_trading_tab():
             st.rerun()
     with hb4:
         if st.button("🔄 Reset Simulation"):
-            for key in ["inventory","flow_trades","hedge_trades","pnl","trade_log","current_order","sp500_summary","risk_narrative","trader_feedback"]:
+            for key in ["inventory","flow_trades","hedge_trades","pnl","trade_log","current_order",
+                        "sp500_summary","risk_narrative","trader_feedback","comparison_pnl"]:
                 st.session_state.pop(key, None)
             st.success("Simulation reset.")
             st.rerun()
