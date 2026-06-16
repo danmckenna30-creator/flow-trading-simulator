@@ -127,20 +127,20 @@ st.markdown("---")
 # ══════════════════════════════════════════════
 
 FLOW_ASSETS = {
-    "S&P 500 (SPY)":       {"ticker":"SPY",      "spread_bps":0.5,  "hedge_ticker":"SPY",  "category":"Equities",    "description":"US large-cap equity index",    "liquidity":50_000_000, "base_vol":0.012},
-    "NASDAQ (QQQ)":        {"ticker":"QQQ",      "spread_bps":0.5,  "hedge_ticker":"QQQ",  "category":"Equities",    "description":"US tech-heavy equity index",   "liquidity":30_000_000, "base_vol":0.016},
-    "FTSE 100 (ISF)":      {"ticker":"ISF.L",    "spread_bps":1.0,  "hedge_ticker":"EWU",  "category":"Equities",    "description":"UK large-cap equity index",    "liquidity":10_000_000, "base_vol":0.011},
-    "EUR/USD":             {"ticker":"EURUSD=X", "spread_bps":0.3,  "hedge_ticker":"FXE",  "category":"FX",          "description":"Euro vs US Dollar",            "liquidity":100_000_000,"base_vol":0.006},
-    "GBP/USD":             {"ticker":"GBPUSD=X", "spread_bps":0.5,  "hedge_ticker":"FXB",  "category":"FX",          "description":"British Pound vs US Dollar",   "liquidity":60_000_000, "base_vol":0.008},
-    "USD/JPY":             {"ticker":"JPY=X",    "spread_bps":0.3,  "hedge_ticker":"FXY",  "category":"FX",          "description":"US Dollar vs Japanese Yen",    "liquidity":80_000_000, "base_vol":0.007},
-    "USD/CHF":             {"ticker":"CHF=X",    "spread_bps":0.5,  "hedge_ticker":"FXF",  "category":"FX",          "description":"US Dollar vs Swiss Franc",     "liquidity":40_000_000, "base_vol":0.007},
-    "US 2Y (SHY)":         {"ticker":"SHY",      "spread_bps":0.3,  "hedge_ticker":"SHY",  "category":"Rates",       "description":"US 2-year Treasury",           "liquidity":80_000_000, "base_vol":0.003},
-    "US 10Y (IEF)":        {"ticker":"IEF",      "spread_bps":0.5,  "hedge_ticker":"IEF",  "category":"Rates",       "description":"US 10-year Treasury",          "liquidity":50_000_000, "base_vol":0.007},
-    "US 30Y (TLT)":        {"ticker":"TLT",      "spread_bps":0.8,  "hedge_ticker":"TLT",  "category":"Rates",       "description":"US 30-year Treasury",          "liquidity":30_000_000, "base_vol":0.012},
-    "Brent Crude (BZ=F)":  {"ticker":"BZ=F",     "spread_bps":2.0,  "hedge_ticker":"USO",  "category":"Commodities", "description":"Brent crude oil futures",      "liquidity":20_000_000, "base_vol":0.020},
-    "Gold (GC=F)":         {"ticker":"GC=F",     "spread_bps":1.0,  "hedge_ticker":"GLD",  "category":"Commodities", "description":"Gold futures",                 "liquidity":25_000_000, "base_vol":0.010},
-    "Copper (HG=F)":       {"ticker":"HG=F",     "spread_bps":2.0,  "hedge_ticker":"CPER", "category":"Commodities", "description":"Copper futures",               "liquidity":10_000_000, "base_vol":0.018},
-    "Natural Gas (NG=F)":  {"ticker":"NG=F",     "spread_bps":3.0,  "hedge_ticker":"UNG",  "category":"Commodities", "description":"Natural gas futures",          "liquidity":8_000_000,  "base_vol":0.035},
+    "S&P 500 (SPY)":       {"ticker":"SPY",      "spread_bps":0.5,  "hedge_ticker":"SPY",  "category":"Equities",    "description":"US large-cap equity index",    "liquidity":30_000_000_000, "base_vol":0.012},
+    "NASDAQ (QQQ)":        {"ticker":"QQQ",      "spread_bps":0.5,  "hedge_ticker":"QQQ",  "category":"Equities",    "description":"US tech-heavy equity index",   "liquidity":15_000_000_000, "base_vol":0.016},
+    "FTSE 100 (ISF)":      {"ticker":"ISF.L",    "spread_bps":1.0,  "hedge_ticker":"EWU",  "category":"Equities",    "description":"UK large-cap equity index",    "liquidity":500_000_000,    "base_vol":0.011},
+    "EUR/USD":             {"ticker":"EURUSD=X", "spread_bps":0.3,  "hedge_ticker":"FXE",  "category":"FX",          "description":"Euro vs US Dollar",            "liquidity":1_000_000_000_000, "base_vol":0.006},
+    "GBP/USD":             {"ticker":"GBPUSD=X", "spread_bps":0.5,  "hedge_ticker":"FXB",  "category":"FX",          "description":"British Pound vs US Dollar",   "liquidity":350_000_000_000, "base_vol":0.008},
+    "USD/JPY":             {"ticker":"JPY=X",    "spread_bps":0.3,  "hedge_ticker":"FXY",  "category":"FX",          "description":"US Dollar vs Japanese Yen",    "liquidity":700_000_000_000, "base_vol":0.007},
+    "USD/CHF":             {"ticker":"CHF=X",    "spread_bps":0.5,  "hedge_ticker":"FXF",  "category":"FX",          "description":"US Dollar vs Swiss Franc",     "liquidity":180_000_000_000, "base_vol":0.007},
+    "US 2Y (SHY)":         {"ticker":"SHY",      "spread_bps":0.3,  "hedge_ticker":"SHY",  "category":"Rates",       "description":"US 2-year Treasury",           "liquidity":1_000_000_000,  "base_vol":0.003},
+    "US 10Y (IEF)":        {"ticker":"IEF",      "spread_bps":0.5,  "hedge_ticker":"IEF",  "category":"Rates",       "description":"US 10-year Treasury",          "liquidity":2_000_000_000,  "base_vol":0.007},
+    "US 30Y (TLT)":        {"ticker":"TLT",      "spread_bps":0.8,  "hedge_ticker":"TLT",  "category":"Rates",       "description":"US 30-year Treasury",          "liquidity":2_500_000_000,  "base_vol":0.012},
+    "Brent Crude (BZ=F)":  {"ticker":"BZ=F",     "spread_bps":2.0,  "hedge_ticker":"USO",  "category":"Commodities", "description":"Brent crude oil futures",      "liquidity":3_000_000_000,  "base_vol":0.020},
+    "Gold (GC=F)":         {"ticker":"GC=F",     "spread_bps":1.0,  "hedge_ticker":"GLD",  "category":"Commodities", "description":"Gold futures",                 "liquidity":5_000_000_000,  "base_vol":0.010},
+    "Copper (HG=F)":       {"ticker":"HG=F",     "spread_bps":2.0,  "hedge_ticker":"CPER", "category":"Commodities", "description":"Copper futures",               "liquidity":1_000_000_000,  "base_vol":0.018},
+    "Natural Gas (NG=F)":  {"ticker":"NG=F",     "spread_bps":3.0,  "hedge_ticker":"UNG",  "category":"Commodities", "description":"Natural gas futures",          "liquidity":1_000_000_000,  "base_vol":0.035},
 }
 
 HEDGE_THRESHOLD_USD = 500_000
@@ -554,7 +554,7 @@ def render_flow_trading_tab():
         f"<div style='font-size:22px; font-weight:bold; color:{side_color};'>{order['side'].upper()} {order['asset']}</div>"
         f"<div style='font-size:18px; color:#FFFFFF; margin-top:4px;'>${order['notional']:,.0f} notional</div>"
         f"<div style='font-size:13px; color:#AAAAAA; margin-top:8px;'>📋 {order['reason']}</div>"
-        f"<div style='font-size:12px; color:#666; margin-top:6px;'>Category: {asset_info.get('category','—')} | Spread: {asset_info.get('spread_bps', 0):.1f} bps | {asset_info.get('description','')}</div>"
+        f"<div style='font-size:12px; color:#666; margin-top:6px;'>Category: {asset_info.get('category','—')} | Min spread: {asset_info.get('spread_bps', 0):.1f} bps | Effective: {_compute_vol_adjusted_spread(asset_info, _get_risk_params()):.2f} bps | {asset_info.get('description','')}</div>"
         f"</div>",
         unsafe_allow_html=True
     )
