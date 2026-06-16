@@ -304,7 +304,9 @@ def _compute_hedge_cost(asset_label, hedge_side, hedge_notional, rp):
     liquidity = asset.get("liquidity", 20_000_000)
     base_vol  = asset.get("base_vol", 0.01) * rp["vol_multiplier"]
 
-    slippage_bps     = random.uniform(rp["slippage_min_bps"], rp["slippage_max_bps"])
+    slip_lo          = rp["slippage_min_bps"] * asset["spread_bps"]
+    slip_hi          = max(slip_lo, rp["slippage_max_bps"] * asset["spread_bps"])
+    slippage_bps     = random.uniform(slip_lo, slip_hi)
     latency_ms       = random.uniform(rp["latency_ms_min"], rp["latency_ms_max"])
     vol_per_sec      = base_vol / math.sqrt(252 * 6.5 * 3600)
     drift_bps        = abs(random.gauss(0, vol_per_sec * math.sqrt(latency_ms / 1000))) * 10_000
@@ -456,8 +458,9 @@ def render_flow_trading_tab():
         st.markdown("## ⚙️ Risk Parameters")
         st.caption("Tune the simulation to reflect different market conditions.")
         rp = st.session_state.get("risk_params", DEFAULT_RISK_PARAMS.copy())
-        rp["slippage_min_bps"]    = st.slider("Min Slippage (bps)",       0.5,  5.0,  float(rp["slippage_min_bps"]),   0.5)
-        rp["slippage_max_bps"]    = st.slider("Max Slippage (bps)",       1.0,  20.0, float(rp["slippage_max_bps"]),   0.5)
+        rp["slippage_min_bps"]    = st.slider("Min Slippage (× instrument spread)", 0.5,  5.0,  float(rp["slippage_min_bps"]),   0.5,
+                                              help="Slippage scales with each instrument's own spread, so liquid names (EUR/USD, QQQ) get tiny slippage and illiquid ones (Natural Gas, FTSE) get more.")
+        rp["slippage_max_bps"]    = st.slider("Max Slippage (× instrument spread)", 1.0,  20.0, float(rp["slippage_max_bps"]),   0.5)
         rp["latency_ms_min"]      = st.slider("Min Latency (ms)",         50,   500,  int(rp["latency_ms_min"]),       50)
         rp["latency_ms_max"]      = st.slider("Max Latency (ms)",         500,  5000, int(rp["latency_ms_max"]),       100)
         rp["vol_multiplier"]      = st.slider("Vol Multiplier",           0.5,  3.0,  float(rp["vol_multiplier"]),     0.1)
