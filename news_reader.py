@@ -2,6 +2,7 @@ import json
 import hashlib
 import os
 import csv
+import time
 from datetime import datetime, timedelta, timezone
 
 import pandas as pd
@@ -154,7 +155,12 @@ def fetch_gnews():
     all_articles = []
     seen_headlines = set()
 
-    for source in GNEWS_SOURCES:
+    for i, source in enumerate(GNEWS_SOURCES):
+        if i > 0:
+            # GNews's free tier enforces a short burst limit separate from
+            # the daily cap -- firing 3 requests back-to-back trips it even
+            # when nowhere near the 100/day quota. A short gap avoids that.
+            time.sleep(1.5)
         articles = _fetch_gnews_region(
             country=source["country"],
             max_articles=source["max"],
