@@ -105,6 +105,7 @@ GNEWS_SOURCES = [
 
 def _fetch_gnews_region(country: str, max_articles: int, label: str) -> list:
     """Fetch top business headlines for a specific country/region."""
+    import streamlit as st
     try:
         url = (
             "https://gnews.io/api/v4/top-headlines"
@@ -117,12 +118,14 @@ def _fetch_gnews_region(country: str, max_articles: int, label: str) -> list:
 
         cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
         articles = []
+        dropped_as_old = 0
         for a in data.get("articles", []):
             if not a.get("title"):
                 continue
             try:
                 pub = pd.to_datetime(a["publishedAt"], utc=True)
                 if pub < cutoff:
+                    dropped_as_old += 1
                     continue
             except Exception:
                 pass
@@ -133,9 +136,15 @@ def _fetch_gnews_region(country: str, max_articles: int, label: str) -> list:
                 "url":      a.get("url", ""),
                 "region":   label,
             })
+        st.write(f"🔧 DEBUG — [{label}] raw from API: {len(data.get('articles', []))}, "
+                 f"dropped as >24h old: {dropped_as_old}, kept: {len(articles)}")
         print(f"[GNews/{label}] Fetched {len(articles)} articles.")
         return articles
     except Exception as e:
+        try:
+            st.write(f"🔧 DEBUG — [{label}] fetch FAILED: {e}")
+        except Exception:
+            pass
         print(f"[GNews/{label} error] {e}")
         return []
 
@@ -167,6 +176,7 @@ def fetch_all_sources():
 
 # --- Processing ---
 def process_all_news(existing_df=None):
+    import streamlit as st  # local import keeps this module's normal use unaffected
     articles = fetch_all_sources()
     # Only deduplicate against real news rows (must have a headline)
     if existing_df is not None and "headline" in existing_df.columns:
@@ -174,11 +184,18 @@ def process_all_news(existing_df=None):
         seen_ids = get_seen_ids(real_rows)
     else:
         seen_ids = set()
+
+    st.write("🔧 DEBUG — raw articles fetched from GNews:", len(articles))
+    st.write("🔧 DEBUG — sample fetched headlines:", [a["headline"] for a in articles[:5]])
+    st.write("🔧 DEBUG — count of existing seen_ids:", len(seen_ids))
+
     print(f"[Pipeline] {len(articles)} fetched, {len(seen_ids)} already seen.")
     results = []
+    skipped_as_seen = 0
     for article in articles:
         aid = article_id(article)
         if aid in seen_ids:
+            skipped_as_seen += 1
             continue
         try:
             analysis = process_headline(article["headline"])
@@ -189,6 +206,10 @@ def process_all_news(existing_df=None):
             results.append(analysis)
         except Exception as e:
             print(f"[Processing error] {e}")
+
+    st.write("🔧 DEBUG — skipped as already-seen:", skipped_as_seen)
+    st.write("🔧 DEBUG — genuinely new results:", len(results))
+
     print(f"[Pipeline] {len(results)} new articles to save.")
     return results
 
