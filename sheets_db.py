@@ -71,13 +71,10 @@ def load_news_from_sheets() -> pd.DataFrame | None:
 
 
 def save_news_to_sheets(new_results: list) -> None:
-    import streamlit as st
     if not new_results:
-        st.write("🔧 DEBUG — save_news_to_sheets called with EMPTY new_results, nothing to save.")
         return
     ws = get_sheet()
     if ws is None:
-        st.write("🔧 DEBUG — get_sheet() returned None — Sheets connection failed, save aborted silently.")
         return
     try:
         records = ws.get_all_records()

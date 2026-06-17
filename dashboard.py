@@ -1356,20 +1356,10 @@ with tabs[0]:
         (datetime.now(pytz.UTC) - _latest_article_time).total_seconds() > 3300  # 55 minutes
     )
 
-    # ── TEMPORARY DEBUG — remove once we've confirmed what's happening ──
-    with st.expander("🔧 Debug: pipeline staleness check", expanded=True):
-        st.write("news_df is None:", _existing_news_for_staleness is None)
-        st.write("rows in news_df:", 0 if _existing_news_for_staleness is None else len(_existing_news_for_staleness))
-        st.write("latest_article_time (UTC):", _latest_article_time)
-        st.write("now (UTC):", datetime.now(pytz.UTC))
-        st.write("should_run:", should_run)
-    # ── END TEMPORARY DEBUG ──
-
     if should_run:
         with st.spinner("Fetching latest news and sentiment..."):
             try:
                 run_pipeline()
-                st.success("run_pipeline() completed without raising.")
             except Exception as e:
                 st.warning(f"Pipeline error: {e}")
 
