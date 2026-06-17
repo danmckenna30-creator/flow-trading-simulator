@@ -1327,24 +1327,41 @@ with tabs[0]:
     st_autorefresh(interval=60 * 60 * 1000, key="macro_refresh")
 
     # Only run pipeline if data is stale or missing.
-    # Uses st.cache_data (server-wide, shared across ALL sessions) rather than
-    # session_state (per-session, resets on every new tab/reconnect), so a new
-    # visitor or a dropped/reconnected websocket doesn't re-trigger the full
-    # news + GPT + Sheets pipeline from scratch.
-    @st.cache_data(ttl=3300)  # 55 minutes
-    def _run_pipeline_gated(_bucket: int):
-        run_pipeline()
-        return True
+    #
+    # IMPORTANT: run_pipeline() (via run_gpt_analysis) writes to
+    # st.session_state internally. st.cache_data's cache is shared GLOBALLY
+    # across every visitor's session by default, so wrapping run_pipeline()
+    # in @st.cache_data meant only one lucky session per window would ever
+    # actually execute the body and get its own session_state populated --
+    # everyone else just got the cached return value with nothing written
+    # to their state. That's why GPT analysis / last-update stopped
+    # refreshing after the previous fix.
+    #
+    # Fix: gate on the data's own freshness instead. The news timestamp in
+    # Google Sheets is already a real, durable, cross-session source of
+    # truth -- it survives restarts and is shared by every visitor without
+    # needing a separate cache mechanism, and it naturally allows a retry on
+    # the next page load if a given attempt fails (rather than blocking all
+    # retries for the rest of a 55-minute window regardless of outcome).
+    _existing_news_for_staleness = load_news()
+    _latest_article_time = None
+    if _existing_news_for_staleness is not None and "date" in _existing_news_for_staleness.columns:
+        _latest_article_time = pd.to_datetime(
+            _existing_news_for_staleness["date"], utc=True, errors="coerce"
+        ).max()
 
-    try:
+    should_run = (
+        _latest_article_time is None or
+        pd.isna(_latest_article_time) or
+        (datetime.now(pytz.UTC) - _latest_article_time).total_seconds() > 3300  # 55 minutes
+    )
+
+    if should_run:
         with st.spinner("Fetching latest news and sentiment..."):
-            # _bucket changes once per 55-minute window, so this only
-            # actually executes run_pipeline() once per window, server-wide,
-            # no matter how many sessions/tabs hit this line in between.
-            _bucket = int(datetime.now(pytz.UTC).timestamp() // 3300)
-            _run_pipeline_gated(_bucket)
-    except Exception as e:
-        st.warning(f"Pipeline error: {e}")
+            try:
+                run_pipeline()
+            except Exception as e:
+                st.warning(f"Pipeline error: {e}")
 
     news_df = load_news()
     gpt = load_gpt()
@@ -1537,8 +1554,11 @@ with tabs[0]:
 
     with bottom_right:
         st.markdown("### Sentiment Over Time")
+        _chart_ready = False
         if news_df is not None and "date" in news_df.columns and "sentiment" in news_df.columns:
-            chart_df = news_df.sort_values("date").set_index("date")[["sentiment"]]
+            chart_df = news_df.dropna(subset=["date", "sentiment"]).sort_values("date").set_index("date")[["sentiment"]]
+            _chart_ready = len(chart_df) >= 2  # need at least 2 points for a meaningful line
+        if _chart_ready:
             st.line_chart(chart_df, height=260)
         else:
             st.markdown("<p style='color:#AAAAAA;'>Not enough data to plot sentiment.</p>", unsafe_allow_html=True)
