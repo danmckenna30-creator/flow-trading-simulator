@@ -52,6 +52,7 @@ def get_sheet():
         return None
 
 
+@st.cache_data(ttl=60)
 def load_news_from_sheets() -> pd.DataFrame | None:
     ws = get_sheet()
     if ws is None:
@@ -116,6 +117,7 @@ def save_news_to_sheets(new_results: list) -> None:
             ws.append_rows(keep_rows, value_input_option="RAW")
 
         print(f"[Sheets] Added {len(to_add)} articles.")
+        load_news_from_sheets.clear()  # so new articles show up immediately, not after the 60s cache window
     except Exception as e:
         print(f"[Sheets] Save error: {e}")
 
@@ -138,10 +140,12 @@ def save_gpt_analysis(gpt_data: dict) -> None:
         ws.append_row(["gpt_analysis", json.dumps(gpt_data)])
         ws.append_row(["saved_at", str(pd.Timestamp.now(tz="UTC"))])
         print("[GPT Sheet] Saved.")
+        load_gpt_analysis.clear()
     except Exception as e:
         print(f"[GPT Sheet] Save error: {e}")
 
 
+@st.cache_data(ttl=60)
 def load_gpt_analysis() -> dict | None:
     """Load GPT analysis from Google Sheets."""
     try:
@@ -171,12 +175,15 @@ def save_last_checked() -> None:
         for idx, row in enumerate(records, start=2):  # row 1 is header
             if row.get("key") == "last_checked":
                 ws.update_cell(idx, 2, now_str)
+                load_last_checked.clear()
                 return
         ws.append_row(["last_checked", now_str])
+        load_last_checked.clear()
     except Exception as e:
         print(f"[Status Sheet] Save error: {e}")
 
 
+@st.cache_data(ttl=60)
 def load_last_checked():
     """Load the timestamp of the last time the pipeline actually ran."""
     try:
