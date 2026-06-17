@@ -97,9 +97,16 @@ def load_news():
 def load_gpt():
     if "gpt_analysis" in st.session_state:
         return st.session_state["gpt_analysis"]
+    # Falls back to the persisted analysis in Google Sheets (durable across
+    # sessions/restarts), rather than a local file that's never actually
+    # written anywhere in this codebase. Without this, every fresh browser
+    # session found nothing here and silently re-called GPT from scratch on
+    # the current headlines below, which is why Risk Regime could flip
+    # between refreshes even with no new news -- each refresh was an
+    # independent, slightly non-deterministic GPT call, not a real change.
     try:
-        with open("gpt_analysis.json", "r") as f:
-            return json.load(f)
+        from sheets_db import load_gpt_analysis
+        return load_gpt_analysis()
     except Exception:
         return None
 
@@ -1360,6 +1367,8 @@ with tabs[0]:
         with st.spinner("Fetching latest news and sentiment..."):
             try:
                 run_pipeline()
+                from sheets_db import save_last_checked
+                save_last_checked()
             except Exception as e:
                 st.warning(f"Pipeline error: {e}")
 
@@ -1367,12 +1376,18 @@ with tabs[0]:
     gpt = load_gpt()
     ai_hype_df = load_ai_hype_history()
 
-    # If no GPT analysis exists but we have headlines, generate it now from existing data
+    # Bootstrap only: fires if Sheets genuinely has no GPT analysis yet
+    # (e.g. very first run ever). Should rarely trigger now that load_gpt()
+    # checks Sheets first instead of a dead local file.
     if gpt is None and news_df is not None and len(news_df) > 0:
         try:
             from gpt_layer import call_gpt
             from sheets_db import save_gpt_analysis
-            headlines = news_df.sort_values("relevance", ascending=False)["headline"].head(5).tolist() if "relevance" in news_df.columns else news_df["headline"].head(5).tolist()
+            if "relevance" in news_df.columns:
+                relevant_df = news_df[news_df["relevance"] > 0].sort_values("relevance", ascending=False)
+                headlines = relevant_df["headline"].head(10).tolist()
+            else:
+                headlines = news_df["headline"].head(10).tolist()
             gpt_output = call_gpt([str(h) for h in headlines if h])
             if gpt_output:
                 st.session_state["gpt_analysis"] = gpt_output
@@ -1388,16 +1403,11 @@ with tabs[0]:
         st.markdown("<div class='label'>Last Update</div>", unsafe_allow_html=True)
 
         try:
-            last_run = st.session_state.get("last_pipeline_run")
-            if last_run:
-                uk_dt = last_run.astimezone(pytz.timezone("Europe/London"))
+            from sheets_db import load_last_checked
+            last_checked = load_last_checked()
+            if last_checked is not None and pd.notna(last_checked):
+                uk_dt = last_checked.astimezone(pytz.timezone("Europe/London"))
                 ts = uk_dt.strftime("%Y-%m-%d %H:%M")
-            elif news_df is not None and "date" in news_df.columns:
-                latest = pd.to_datetime(news_df["date"], utc=True, errors="coerce").max()
-                if pd.notna(latest):
-                    ts = latest.astimezone(pytz.timezone("Europe/London")).strftime("%Y-%m-%d %H:%M")
-                else:
-                    ts = "No data"
             else:
                 ts = "No data"
         except Exception:

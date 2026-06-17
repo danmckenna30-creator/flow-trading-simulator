@@ -208,7 +208,12 @@ def process_all_news(existing_df=None):
 # --- GPT Analysis ---
 def run_gpt_analysis(results):
     sorted_results = sorted(results, key=lambda x: x["relevance"], reverse=True)
-    relevant = [r["headline"] for r in sorted_results[:3]]
+    # Use a broader, genuinely-relevant sample rather than always the top 3 --
+    # classifying risk-on/risk-off/neutral from 3 cherry-picked headlines is
+    # inherently noisy and can flip between runs even when the underlying
+    # news hasn't materially changed. Filtering to headlines with real
+    # relevance and using up to 10 gives GPT a steadier signal.
+    relevant = [r["headline"] for r in sorted_results if r["relevance"] > 0][:10]
     if not relevant:
         return
     try:

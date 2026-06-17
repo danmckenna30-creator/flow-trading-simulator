@@ -124,6 +124,7 @@ def save_news_to_sheets(new_results: list) -> None:
 # GPT ANALYSIS — persists the latest macro analysis
 # ══════════════════════════════════════════════════════════════
 GPT_TAB_NAME = "gpt_analysis"
+STATUS_TAB_NAME = "app_status"
 
 
 def save_gpt_analysis(gpt_data: dict) -> None:
@@ -152,6 +153,41 @@ def load_gpt_analysis() -> dict | None:
         return None
     except Exception as e:
         print(f"[GPT Sheet] Load error: {e}")
+        return None
+
+
+# ══════════════════════════════════════════════════════════════
+# APP STATUS — when the pipeline last actually ran, regardless of
+# whether it found new articles. Kept in its own tab since
+# save_gpt_analysis() clears its tab on every write.
+# ══════════════════════════════════════════════════════════════
+
+def save_last_checked() -> None:
+    """Record the timestamp of the last time the pipeline actually ran."""
+    try:
+        ws = _open_or_create_tab(STATUS_TAB_NAME, ["key", "value"])
+        records = ws.get_all_records()
+        now_str = str(pd.Timestamp.now(tz="UTC"))
+        for idx, row in enumerate(records, start=2):  # row 1 is header
+            if row.get("key") == "last_checked":
+                ws.update_cell(idx, 2, now_str)
+                return
+        ws.append_row(["last_checked", now_str])
+    except Exception as e:
+        print(f"[Status Sheet] Save error: {e}")
+
+
+def load_last_checked():
+    """Load the timestamp of the last time the pipeline actually ran."""
+    try:
+        ws = _open_or_create_tab(STATUS_TAB_NAME, ["key", "value"])
+        records = ws.get_all_records()
+        for row in records:
+            if row.get("key") == "last_checked":
+                return pd.to_datetime(row["value"], utc=True, errors="coerce")
+        return None
+    except Exception as e:
+        print(f"[Status Sheet] Load error: {e}")
         return None
 
 
