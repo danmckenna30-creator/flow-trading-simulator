@@ -22,8 +22,21 @@ COLUMNS    = ["id", "date", "source", "headline", "sentiment",
 
 
 def _get_client():
-    """Return an authorised gspread client."""
-    creds_dict = dict(st.secrets["gcp_service_account"])
+    """Return an authorised gspread client.
+
+    Looks for credentials in this order:
+    1. GCP_SERVICE_ACCOUNT_JSON env variable (used on Render, where there
+       is no st.secrets), expected to be a JSON string of the full
+       service-account object.
+    2. st.secrets["gcp_service_account"] (used on Streamlit Cloud).
+
+    This lets the same file run unchanged on either platform.
+    """
+    env_json = os.environ.get("GCP_SERVICE_ACCOUNT_JSON")
+    if env_json:
+        creds_dict = json.loads(env_json)
+    else:
+        creds_dict = dict(st.secrets["gcp_service_account"])
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     return gspread.authorize(creds)
 
