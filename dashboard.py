@@ -1201,6 +1201,18 @@ if _current_user and st.session_state.get("auth_state") == "signed_in":
     _save_user_session(_current_user)
 
 # ---------- TABS INITIALIZATION ----------
+# ── TEMPORARY WHOLE-SCRIPT TIMING ──
+import time as _perf_time
+_PERF_TIMINGS = []
+_PERF_T0 = _perf_time.perf_counter()
+def _perf_mark(label):
+    global _PERF_T0
+    now = _perf_time.perf_counter()
+    _PERF_TIMINGS.append((label, (now - _PERF_T0) * 1000))
+    _PERF_T0 = now
+_perf_mark("setup + auth + market data + news load (everything above the tabs)")
+# ── END TIMING SETUP ──
+
 tabs = st.tabs(["Macro", "Risk", "Commodities", "S&P500", "Flow Trading", "Trade Ideas", "Econ Calendar", "Interview Prep"])
 
 # ---------- LOAD MARKET DATA ----------
@@ -1323,6 +1335,7 @@ def extract_commodity_themes(news):
 # =========================================================
 
 with tabs[0]:
+    _perf_mark("tab 0: Macro")
     # Auto-refresh trigger every 60 mins
     st_autorefresh(interval=60 * 60 * 1000, key="macro_refresh")
 
@@ -1933,6 +1946,7 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
             st.rerun()
 
 with tabs[1]:
+    _perf_mark("tab 1: Risk")
     st.markdown("## Risk Monitor")
     st.markdown("---")
 
@@ -2164,6 +2178,7 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
             st.rerun()
 
 with tabs[2]:
+    _perf_mark("tab 2: Commodities")
     st.markdown("## Commodities")
     st.caption("Live prices, trends, risk themes, and flow signals across energy, metals, and agriculture.")
     st.markdown("---")
@@ -2652,6 +2667,7 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
             st.rerun()
 
 with tabs[3]:
+    _perf_mark("tab 3: S&P500")
     render_sp500_tab()
 
 
@@ -2708,6 +2724,7 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
             st.rerun()
 
 with tabs[4]:
+    _perf_mark("tab 4: Flow Trading")
     render_flow_trading_tab()
 
     st.markdown("---")
@@ -2828,6 +2845,7 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
 # TAB 5 — TRADE IDEAS
 # ══════════════════════════════════════════════════════════════
 with tabs[5]:
+    _perf_mark("tab 5: Trade Ideas")
     import json as _json
     from datetime import datetime as _dt2
 
@@ -3192,6 +3210,7 @@ Be concise (2-4 sentences) and direct."""
 # TAB 6 — ECONOMIC CALENDAR
 # ══════════════════════════════════════════════════════════════
 with tabs[6]:
+    _perf_mark("tab 6: Econ Calendar")
     import json as _json2
     from datetime import datetime as _dt3, timedelta as _td
 
@@ -3505,6 +3524,7 @@ VERDICT: [Pass / Borderline / Fail — one sentence why]"""
 # TAB 7 — INTERVIEW PREP
 # ══════════════════════════════════════════════════════════════
 with tabs[7]:
+    _perf_mark("tab 7: Interview Prep")
     import random as _random
 
     st.markdown("## 🎓 Interview Prep")
@@ -4188,3 +4208,13 @@ For interview technique questions, give specific, actionable advice."""
         if st.button("🗑️ Clear chat", key="clear_chat_Interview Prep"):
             st.session_state[tab_chat_key_ip] = []
             st.rerun()
+
+# ── DISPLAY TIMING (TEMPORARY) ──
+_perf_mark("script finished")
+with st.expander("🔧 Whole-script timing (this rerun, ms)", expanded=True):
+    _perf_total = sum(t for _, t in _PERF_TIMINGS)
+    for _perf_label, _perf_t in _PERF_TIMINGS:
+        _perf_pct = (_perf_t / _perf_total * 100) if _perf_total else 0
+        st.write(f"{_perf_label}: {_perf_t:.0f} ms ({_perf_pct:.0f}%)")
+    st.write(f"**Total: {_perf_total:.0f} ms**")
+# ── END DISPLAY TIMING ──
