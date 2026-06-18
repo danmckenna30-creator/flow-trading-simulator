@@ -1210,7 +1210,7 @@ def _perf_mark(label):
     now = _perf_time.perf_counter()
     _PERF_TIMINGS.append((label, (now - _PERF_T0) * 1000))
     _PERF_T0 = now
-_perf_mark("setup + auth + market data + news load (everything above the tabs)")
+_perf_mark("setup + auth + market data + news load (above the tabs)")
 # ── END TIMING SETUP ──
 
 tabs = st.tabs(["Macro", "Risk", "Commodities", "S&P500", "Flow Trading", "Trade Ideas", "Econ Calendar", "Interview Prep"])
@@ -1974,6 +1974,7 @@ with tabs[1]:
     elif vix_price <= 25: vol_regime, vol_color = "NORMAL VOL", "#FFDC00"
     else:                 vol_regime, vol_color = "HIGH VOL",   "#ff4d4d"
 
+    _perf_mark("  Risk: setup + variables")
     # ── SECTION 1: MARKET RISK ──────────────────────────────────
     st.markdown("### 📊 Section 1 — Market Risk Overview")
     st.caption("This section shows the overall market environment. As a flow trader, this tells you whether clients are likely buying risk assets (stocks, oil, copper) or selling them for safety (gold, USD, bonds).")
@@ -2007,6 +2008,7 @@ with tabs[1]:
     st.caption("**Risk Score** blends equity moves, copper, oil, FX and news sentiment into a single number. Above +0.3 = risk-on. Below -0.3 = risk-off. **VIX** below 15 is calm, above 25 means traders are scared.")
     st.markdown("---")
 
+    _perf_mark("  Risk: section 1 cards (4-column)")
     # Regime Gauge
     st.markdown("#### Regime Gauge")
     fig_gauge = go.Figure(go.Indicator(
@@ -2034,6 +2036,7 @@ with tabs[1]:
     st.caption("The gauge shows where markets sit between full risk-off (red) and risk-on (green). As a flow trader this predicts which way client orders will skew — in risk-on environments expect more equity and commodity buying.")
     st.markdown("---")
 
+    _perf_mark("  Risk: regime gauge (plotly)")
     # Heatmap
     st.markdown("#### Cross-Asset Heatmap")
     heatmap_assets  = ["VIX", "S&P 500", "USDJPY", "Brent Crude", "Copper", "Gold"]
@@ -2050,6 +2053,7 @@ with tabs[1]:
     st.caption("Red = falling today, Green = rising. VIX rising (red) is bad — fear is up. Copper and S&P 500 rising together = strong risk-on signal. Gold rising while equities fall = classic flight to safety.")
     st.markdown("---")
 
+    _perf_mark("  Risk: heatmap (plotly)")
     # FX Pairs
     st.markdown("#### FX Risk Pairs")
     fx_cols = st.columns(3)
@@ -2068,6 +2072,7 @@ with tabs[1]:
     st.caption("USD/JPY rising = risk-on (investors selling safe-haven Yen). GBP/USD and EUR/USD rising = dollar weakening, positive for global risk. Large FX moves signal big institutional flows that flow traders need to be aware of.")
     st.markdown("---")
 
+    _perf_mark("  Risk: FX pairs")
     # News Risk Themes
     st.markdown("#### News-Driven Risk Themes")
     if news_df is not None and len(news_df) > 0:
@@ -2097,6 +2102,7 @@ with tabs[1]:
     st.caption("These themes are extracted from today's headlines. Each active theme is a macro risk that could drive client flow — e.g. geopolitical risk pushes clients into gold and out of equities.")
     st.markdown("---")
     st.markdown("---")
+    _perf_mark("  Risk: news themes")
     st.markdown("#### 🤖 AI Risk Narrative")
     st.caption("Uses live market data and the risk monitors above to generate a single trader-ready risk summary.")
 
@@ -2134,6 +2140,7 @@ Bloomberg style. Direct. Plain prose only."""
     st.markdown("### 💬 Ask the Trading Assistant")
     st.caption("Ask anything about markets, trading, or what you see on this tab. Powered by GPT.")
 
+    _perf_mark("  Risk: AI narrative section")
     tab_chat_key = f"chat_history_Risk"
     if tab_chat_key not in st.session_state:
         st.session_state[tab_chat_key] = []
@@ -2177,6 +2184,7 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
             st.session_state[tab_chat_key] = []
             st.rerun()
 
+    _perf_mark("  Risk: chat input + end of tab")
 with tabs[2]:
     _perf_mark("tab 2: Commodities")
     st.markdown("## Commodities")
