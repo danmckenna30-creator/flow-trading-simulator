@@ -474,20 +474,8 @@ def _total_pnl():
 
 def render_flow_trading_tab():
     import random
-    import time as _time
     from datetime import datetime as _dt
     init_flow_state()
-
-    # ── TEMPORARY PERFORMANCE TIMING ──
-    _timings = []
-    _t0 = _time.perf_counter()
-    def _mark(label):
-        nonlocal _t0
-        now = _time.perf_counter()
-        _timings.append((label, (now - _t0) * 1000))  # ms
-        _t0 = now
-    _mark("init_flow_state")
-    # ── END TIMING SETUP ──
 
     st.markdown("## 🏦 Flow Trading Simulator")
     st.caption("You are a junior flow trader at a major investment bank. Every hedge costs real money — slippage, market impact, latency drift, and toxic flow all eat into your P&L. Your goal: earn more in spread than you lose in hedging costs.")
@@ -529,8 +517,6 @@ def render_flow_trading_tab():
         st.markdown("---")
         st.caption(f"**Max inventory:** ${MAX_INVENTORY_USD:,.0f} | **Hedge threshold:** ${HEDGE_THRESHOLD_USD:,.0f}")
     st.markdown("---")
-
-    _mark("sidebar + risk params")
     # ── TRADER VIEWS ─────────────────────────────────────────────
     _vw_pct  = int(st.session_state.get("view_weight", 0.0) * 100)
     _inv_pct = 100 - _vw_pct
@@ -579,8 +565,6 @@ def render_flow_trading_tab():
             st.caption("All views neutral — quote skew is driven entirely by inventory lean.")
 
     st.markdown("---")
-
-    _mark("trader views expander")
     # ── AUTO-GENERATE CLIENT ORDER ───────────────────────────────
     _hdr_col, _toggle_col = st.columns([3, 1])
     with _hdr_col:
@@ -853,8 +837,6 @@ def render_flow_trading_tab():
                 st.rerun()
 
     st.markdown("---")
-
-    _mark("incoming order + auto/manual quote UI")
     # ── MANUAL TRADE ENTRY ───────────────────────────────────────
     with st.expander("➕ Enter Manual Trade", expanded=False):
         st.caption("Enter your own trade manually — useful for testing specific scenarios.")
@@ -870,8 +852,6 @@ def render_flow_trading_tab():
             st.rerun()
 
     st.markdown("---")
-
-    _mark("manual trade entry")
     # ── INVENTORY & RISK MANAGEMENT ─────────────────────────────
     st.markdown("### 📊 Your Trading Book")
     inv = st.session_state["inventory"]
@@ -901,8 +881,6 @@ def render_flow_trading_tab():
     st.markdown(f"<div class='card' style='text-align:center; margin-top:4px;'><div class='label'>TOTAL P&L</div><div class='big-number' style='color:{total_color};'>${total_pnl:,.0f}</div></div>", unsafe_allow_html=True)
 
     st.markdown("")
-
-    _mark("inventory + risk mgmt panel")
     # ── SKEW COMPARISON PANEL ────────────────────────────────────
     comp = st.session_state.get("comparison_pnl", {"spread_inventory_only": 0.0, "spread_blended": 0.0})
     _n_trades = len([t for t in st.session_state.get("flow_trades", []) if t.get("spread_earned", 0) > 0 or t.get("spread_inv_only", 0) > 0])
@@ -1036,8 +1014,6 @@ def render_flow_trading_tab():
             st.rerun()
 
     st.markdown("---")
-
-    _mark("skew comparison panel")
     # ── TRADE LOG ────────────────────────────────────────────────
     st.markdown("### 📋 Decision Log")
     trade_log = st.session_state.get("trade_log", [])
@@ -1070,8 +1046,6 @@ def render_flow_trading_tab():
         st.info("No trades yet — accept or reject the incoming client order above.")
 
     st.markdown("---")
-
-    _mark("trade log")
     # ── AI PERFORMANCE FEEDBACK ──────────────────────────────────
     st.markdown("### 🤖 AI Trading Coach")
     st.caption("Once you have made some decisions, get scored and coached by GPT on your risk management, decision quality, and what a real flow trader would have done differently.")
@@ -1151,17 +1125,6 @@ To reduce inventory risk, you hedge — placing an offsetting trade in the marke
 # ══════════════════════════════════════════════════════════════
 # AUTHENTICATION — optional, sidebar-based, guest mode default
 # ══════════════════════════════════════════════════════════════
-
-    # ── DISPLAY TIMING (TEMPORARY) ──
-    _mark("ai feedback + rest of tab")
-    with st.expander("🔧 Performance timing (this rerun, ms)", expanded=True):
-        _total = sum(t for _, t in _timings)
-        for _label, _t in _timings:
-            _pct = (_t / _total * 100) if _total else 0
-            st.write(f"{_label}: {_t:.0f} ms ({_pct:.0f}%)")
-        st.write(f"**Total: {_total:.0f} ms**")
-    # ── END DISPLAY TIMING ──
-
 
 def _do_login(username: str, password: str) -> bool:
     try:
