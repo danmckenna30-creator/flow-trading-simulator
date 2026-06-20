@@ -1222,7 +1222,7 @@ def _perf_mark(label):
     now = _perf_time.perf_counter()
     _PERF_TIMINGS.append((label, (now - _PERF_T0) * 1000))
     _PERF_T0 = now
-_perf_mark("setup + auth + market data + news load (above the tabs)")
+_perf_mark("setup")
 # ── END TIMING SETUP ──
 
 tabs = st.tabs(["Macro", "Risk", "Commodities", "S&P500", "Flow Trading", "Trade Ideas", "Econ Calendar", "Interview Prep"])
@@ -1347,9 +1347,10 @@ def extract_commodity_themes(news):
 # =========================================================
 
 with tabs[0]:
-    _perf_mark("  >>> ENTER tab 0: Macro")
+    _perf_mark("  >>> ENTER Macro")
     _perf_mark("tab 0: Macro")
     # Auto-refresh trigger every 60 mins
+    _perf_mark("    Macro: before st_autorefresh")
     st_autorefresh(interval=60 * 60 * 1000, key="macro_refresh")
 
     # Only run pipeline if data is stale or missing.
@@ -1369,6 +1370,7 @@ with tabs[0]:
     # needing a separate cache mechanism, and it naturally allows a retry on
     # the next page load if a given attempt fails (rather than blocking all
     # retries for the rest of a 55-minute window regardless of outcome).
+    _perf_mark("    Macro: after st_autorefresh")
     _existing_news_for_staleness = load_news()
     _latest_article_time = None
     if _existing_news_for_staleness is not None and "date" in _existing_news_for_staleness.columns:
@@ -1376,12 +1378,14 @@ with tabs[0]:
             _existing_news_for_staleness["date"], utc=True, errors="coerce"
         ).max()
 
+    _perf_mark("    Macro: after first load_news (staleness)")
     should_run = (
         _latest_article_time is None or
         pd.isna(_latest_article_time) or
         (datetime.now(pytz.UTC) - _latest_article_time).total_seconds() > 3300  # 55 minutes
     )
 
+    _perf_mark("    Macro: after should_run check")
     if should_run:
         with st.spinner("Fetching latest news and sentiment..."):
             try:
@@ -1391,10 +1395,14 @@ with tabs[0]:
             except Exception as e:
                 st.warning(f"Pipeline error: {e}")
 
+    _perf_mark("    Macro: after pipeline gate (incl. spinner if ran)")
     news_df = load_news()
+    _perf_mark("    Macro: after second load_news")
     gpt = load_gpt()
+    _perf_mark("    Macro: after load_gpt")
     ai_hype_df = load_ai_hype_history()
 
+    _perf_mark("    Macro: after load_ai_hype_history")
     # Bootstrap only: fires if Sheets genuinely has no GPT analysis yet
     # (e.g. very first run ever). Should rarely trigger now that load_gpt()
     # checks Sheets first instead of a dead local file.
@@ -1415,6 +1423,7 @@ with tabs[0]:
         except Exception as e:
             print(f"[GPT fallback] {e}")
 
+    _perf_mark("    Macro: after bootstrap GPT fallback")
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
@@ -1474,6 +1483,7 @@ with tabs[0]:
 
     st.markdown("")
 
+    _perf_mark("    Macro: after 4-col cards")
     st.markdown("### Macro Analyst View")
     left, right = st.columns(2)
 
@@ -1958,9 +1968,10 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
             st.session_state[tab_chat_key] = []
             st.rerun()
 
-_perf_mark("<<< EXIT tab 0: Macro")
+    _perf_mark("    Macro: end of body")
+_perf_mark("<<< EXIT Macro")
 with tabs[1]:
-    _perf_mark("  >>> ENTER tab 1: Risk")
+    _perf_mark("  >>> ENTER Risk")
     _perf_mark("tab 1: Risk")
     st.markdown("## Risk Monitor")
     st.markdown("---")
@@ -1989,7 +2000,6 @@ with tabs[1]:
     elif vix_price <= 25: vol_regime, vol_color = "NORMAL VOL", "#FFDC00"
     else:                 vol_regime, vol_color = "HIGH VOL",   "#ff4d4d"
 
-    _perf_mark("  Risk: setup + variables")
     _perf_mark("  Risk: setup + variables")
     # ── SECTION 1: MARKET RISK ──────────────────────────────────
     st.markdown("### 📊 Section 1 — Market Risk Overview")
@@ -2025,7 +2035,6 @@ with tabs[1]:
     st.markdown("---")
 
     _perf_mark("  Risk: section 1 cards (4-column)")
-    _perf_mark("  Risk: section 1 cards (4-column)")
     # Regime Gauge
     st.markdown("#### Regime Gauge")
     fig_gauge = go.Figure(go.Indicator(
@@ -2054,7 +2063,6 @@ with tabs[1]:
     st.markdown("---")
 
     _perf_mark("  Risk: regime gauge (plotly)")
-    _perf_mark("  Risk: regime gauge (plotly)")
     # Heatmap
     st.markdown("#### Cross-Asset Heatmap")
     heatmap_assets  = ["VIX", "S&P 500", "USDJPY", "Brent Crude", "Copper", "Gold"]
@@ -2071,7 +2079,6 @@ with tabs[1]:
     st.caption("Red = falling today, Green = rising. VIX rising (red) is bad — fear is up. Copper and S&P 500 rising together = strong risk-on signal. Gold rising while equities fall = classic flight to safety.")
     st.markdown("---")
 
-    _perf_mark("  Risk: heatmap (plotly)")
     _perf_mark("  Risk: heatmap (plotly)")
     # FX Pairs
     st.markdown("#### FX Risk Pairs")
@@ -2091,7 +2098,6 @@ with tabs[1]:
     st.caption("USD/JPY rising = risk-on (investors selling safe-haven Yen). GBP/USD and EUR/USD rising = dollar weakening, positive for global risk. Large FX moves signal big institutional flows that flow traders need to be aware of.")
     st.markdown("---")
 
-    _perf_mark("  Risk: FX pairs")
     _perf_mark("  Risk: FX pairs")
     # News Risk Themes
     st.markdown("#### News-Driven Risk Themes")
@@ -2122,7 +2128,6 @@ with tabs[1]:
     st.caption("These themes are extracted from today's headlines. Each active theme is a macro risk that could drive client flow — e.g. geopolitical risk pushes clients into gold and out of equities.")
     st.markdown("---")
     st.markdown("---")
-    _perf_mark("  Risk: news themes")
     _perf_mark("  Risk: news themes")
     st.markdown("#### 🤖 AI Risk Narrative")
     st.caption("Uses live market data and the risk monitors above to generate a single trader-ready risk summary.")
@@ -2161,7 +2166,6 @@ Bloomberg style. Direct. Plain prose only."""
     st.markdown("### 💬 Ask the Trading Assistant")
     st.caption("Ask anything about markets, trading, or what you see on this tab. Powered by GPT.")
 
-    _perf_mark("  Risk: AI narrative section")
     _perf_mark("  Risk: AI narrative section")
     tab_chat_key = f"chat_history_Risk"
     if tab_chat_key not in st.session_state:
@@ -2207,10 +2211,9 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
             st.rerun()
 
     _perf_mark("  Risk: chat input + end of tab")
-    _perf_mark("  Risk: chat input + end of tab")
-_perf_mark("<<< EXIT tab 1: Risk")
+_perf_mark("<<< EXIT Risk")
 with tabs[2]:
-    _perf_mark("  >>> ENTER tab 2: Commodities")
+    _perf_mark("  >>> ENTER Commodities")
     _perf_mark("tab 2: Commodities")
     st.markdown("## Commodities")
     st.caption("Live prices, trends, risk themes, and flow signals across energy, metals, and agriculture.")
@@ -2699,9 +2702,9 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
             st.session_state[tab_chat_key] = []
             st.rerun()
 
-_perf_mark("<<< EXIT tab 2: Commodities")
+_perf_mark("<<< EXIT Commodities")
 with tabs[3]:
-    _perf_mark("  >>> ENTER tab 3: S&P500")
+    _perf_mark("  >>> ENTER S&P500")
     _perf_mark("tab 3: S&P500")
     render_sp500_tab()
 
@@ -2758,9 +2761,9 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
             st.session_state[tab_chat_key] = []
             st.rerun()
 
-_perf_mark("<<< EXIT tab 3: S&P500")
+_perf_mark("<<< EXIT S&P500")
 with tabs[4]:
-    _perf_mark("  >>> ENTER tab 4: Flow Trading")
+    _perf_mark("  >>> ENTER Flow Trading")
     _perf_mark("tab 4: Flow Trading")
     render_flow_trading_tab()
 
@@ -2881,9 +2884,9 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
 # ══════════════════════════════════════════════════════════════
 # TAB 5 — TRADE IDEAS
 # ══════════════════════════════════════════════════════════════
-_perf_mark("<<< EXIT tab 4: Flow Trading")
+_perf_mark("<<< EXIT Flow Trading")
 with tabs[5]:
-    _perf_mark("  >>> ENTER tab 5: Trade Ideas")
+    _perf_mark("  >>> ENTER Trade Ideas")
     _perf_mark("tab 5: Trade Ideas")
     import json as _json
     from datetime import datetime as _dt2
@@ -3248,9 +3251,9 @@ Be concise (2-4 sentences) and direct."""
 # ══════════════════════════════════════════════════════════════
 # TAB 6 — ECONOMIC CALENDAR
 # ══════════════════════════════════════════════════════════════
-_perf_mark("<<< EXIT tab 5: Trade Ideas")
+_perf_mark("<<< EXIT Trade Ideas")
 with tabs[6]:
-    _perf_mark("  >>> ENTER tab 6: Econ Calendar")
+    _perf_mark("  >>> ENTER Econ Calendar")
     _perf_mark("tab 6: Econ Calendar")
     import json as _json2
     from datetime import datetime as _dt3, timedelta as _td
@@ -3564,9 +3567,9 @@ VERDICT: [Pass / Borderline / Fail — one sentence why]"""
 # ══════════════════════════════════════════════════════════════
 # TAB 7 — INTERVIEW PREP
 # ══════════════════════════════════════════════════════════════
-_perf_mark("<<< EXIT tab 6: Econ Calendar")
+_perf_mark("<<< EXIT Econ Calendar")
 with tabs[7]:
-    _perf_mark("  >>> ENTER tab 7: Interview Prep")
+    _perf_mark("  >>> ENTER Interview Prep")
     _perf_mark("tab 7: Interview Prep")
     import random as _random
 
@@ -4263,8 +4266,7 @@ with st.expander("🔧 Whole-script timing (this rerun, ms)", expanded=True):
 # ── END DISPLAY TIMING ──
 
 # ── DISPLAY TIMING (TEMPORARY) ──
-_perf_mark("<<< EXIT tab 7: Interview Prep")
-_perf_mark("script finished")
+_perf_mark("<<< EXIT Interview Prep")
 with st.expander("🔧 Whole-script timing (this rerun, ms)", expanded=True):
     _perf_total = sum(t for _, t in _PERF_TIMINGS)
     for _perf_label, _perf_t in _PERF_TIMINGS:
