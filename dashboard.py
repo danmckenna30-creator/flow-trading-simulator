@@ -1213,6 +1213,18 @@ def _perf_mark(label):
 _perf_mark("setup + auth + market data + news load (above the tabs)")
 # ── END TIMING SETUP ──
 
+# ── TEMPORARY WHOLE-SCRIPT TIMING ──
+import time as _perf_time
+_PERF_TIMINGS = []
+_PERF_T0 = _perf_time.perf_counter()
+def _perf_mark(label):
+    global _PERF_T0
+    now = _perf_time.perf_counter()
+    _PERF_TIMINGS.append((label, (now - _PERF_T0) * 1000))
+    _PERF_T0 = now
+_perf_mark("setup + auth + market data + news load (above the tabs)")
+# ── END TIMING SETUP ──
+
 tabs = st.tabs(["Macro", "Risk", "Commodities", "S&P500", "Flow Trading", "Trade Ideas", "Econ Calendar", "Interview Prep"])
 
 # ---------- LOAD MARKET DATA ----------
@@ -1335,6 +1347,7 @@ def extract_commodity_themes(news):
 # =========================================================
 
 with tabs[0]:
+    _perf_mark("  >>> ENTER tab 0: Macro")
     _perf_mark("tab 0: Macro")
     # Auto-refresh trigger every 60 mins
     st_autorefresh(interval=60 * 60 * 1000, key="macro_refresh")
@@ -1945,7 +1958,9 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
             st.session_state[tab_chat_key] = []
             st.rerun()
 
+_perf_mark("<<< EXIT tab 0: Macro")
 with tabs[1]:
+    _perf_mark("  >>> ENTER tab 1: Risk")
     _perf_mark("tab 1: Risk")
     st.markdown("## Risk Monitor")
     st.markdown("---")
@@ -1974,6 +1989,7 @@ with tabs[1]:
     elif vix_price <= 25: vol_regime, vol_color = "NORMAL VOL", "#FFDC00"
     else:                 vol_regime, vol_color = "HIGH VOL",   "#ff4d4d"
 
+    _perf_mark("  Risk: setup + variables")
     _perf_mark("  Risk: setup + variables")
     # ── SECTION 1: MARKET RISK ──────────────────────────────────
     st.markdown("### 📊 Section 1 — Market Risk Overview")
@@ -2009,6 +2025,7 @@ with tabs[1]:
     st.markdown("---")
 
     _perf_mark("  Risk: section 1 cards (4-column)")
+    _perf_mark("  Risk: section 1 cards (4-column)")
     # Regime Gauge
     st.markdown("#### Regime Gauge")
     fig_gauge = go.Figure(go.Indicator(
@@ -2037,6 +2054,7 @@ with tabs[1]:
     st.markdown("---")
 
     _perf_mark("  Risk: regime gauge (plotly)")
+    _perf_mark("  Risk: regime gauge (plotly)")
     # Heatmap
     st.markdown("#### Cross-Asset Heatmap")
     heatmap_assets  = ["VIX", "S&P 500", "USDJPY", "Brent Crude", "Copper", "Gold"]
@@ -2053,6 +2071,7 @@ with tabs[1]:
     st.caption("Red = falling today, Green = rising. VIX rising (red) is bad — fear is up. Copper and S&P 500 rising together = strong risk-on signal. Gold rising while equities fall = classic flight to safety.")
     st.markdown("---")
 
+    _perf_mark("  Risk: heatmap (plotly)")
     _perf_mark("  Risk: heatmap (plotly)")
     # FX Pairs
     st.markdown("#### FX Risk Pairs")
@@ -2072,6 +2091,7 @@ with tabs[1]:
     st.caption("USD/JPY rising = risk-on (investors selling safe-haven Yen). GBP/USD and EUR/USD rising = dollar weakening, positive for global risk. Large FX moves signal big institutional flows that flow traders need to be aware of.")
     st.markdown("---")
 
+    _perf_mark("  Risk: FX pairs")
     _perf_mark("  Risk: FX pairs")
     # News Risk Themes
     st.markdown("#### News-Driven Risk Themes")
@@ -2102,6 +2122,7 @@ with tabs[1]:
     st.caption("These themes are extracted from today's headlines. Each active theme is a macro risk that could drive client flow — e.g. geopolitical risk pushes clients into gold and out of equities.")
     st.markdown("---")
     st.markdown("---")
+    _perf_mark("  Risk: news themes")
     _perf_mark("  Risk: news themes")
     st.markdown("#### 🤖 AI Risk Narrative")
     st.caption("Uses live market data and the risk monitors above to generate a single trader-ready risk summary.")
@@ -2140,6 +2161,7 @@ Bloomberg style. Direct. Plain prose only."""
     st.markdown("### 💬 Ask the Trading Assistant")
     st.caption("Ask anything about markets, trading, or what you see on this tab. Powered by GPT.")
 
+    _perf_mark("  Risk: AI narrative section")
     _perf_mark("  Risk: AI narrative section")
     tab_chat_key = f"chat_history_Risk"
     if tab_chat_key not in st.session_state:
@@ -2185,7 +2207,10 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
             st.rerun()
 
     _perf_mark("  Risk: chat input + end of tab")
+    _perf_mark("  Risk: chat input + end of tab")
+_perf_mark("<<< EXIT tab 1: Risk")
 with tabs[2]:
+    _perf_mark("  >>> ENTER tab 2: Commodities")
     _perf_mark("tab 2: Commodities")
     st.markdown("## Commodities")
     st.caption("Live prices, trends, risk themes, and flow signals across energy, metals, and agriculture.")
@@ -2674,7 +2699,9 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
             st.session_state[tab_chat_key] = []
             st.rerun()
 
+_perf_mark("<<< EXIT tab 2: Commodities")
 with tabs[3]:
+    _perf_mark("  >>> ENTER tab 3: S&P500")
     _perf_mark("tab 3: S&P500")
     render_sp500_tab()
 
@@ -2731,7 +2758,9 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
             st.session_state[tab_chat_key] = []
             st.rerun()
 
+_perf_mark("<<< EXIT tab 3: S&P500")
 with tabs[4]:
+    _perf_mark("  >>> ENTER tab 4: Flow Trading")
     _perf_mark("tab 4: Flow Trading")
     render_flow_trading_tab()
 
@@ -2852,7 +2881,9 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
 # ══════════════════════════════════════════════════════════════
 # TAB 5 — TRADE IDEAS
 # ══════════════════════════════════════════════════════════════
+_perf_mark("<<< EXIT tab 4: Flow Trading")
 with tabs[5]:
+    _perf_mark("  >>> ENTER tab 5: Trade Ideas")
     _perf_mark("tab 5: Trade Ideas")
     import json as _json
     from datetime import datetime as _dt2
@@ -3217,7 +3248,9 @@ Be concise (2-4 sentences) and direct."""
 # ══════════════════════════════════════════════════════════════
 # TAB 6 — ECONOMIC CALENDAR
 # ══════════════════════════════════════════════════════════════
+_perf_mark("<<< EXIT tab 5: Trade Ideas")
 with tabs[6]:
+    _perf_mark("  >>> ENTER tab 6: Econ Calendar")
     _perf_mark("tab 6: Econ Calendar")
     import json as _json2
     from datetime import datetime as _dt3, timedelta as _td
@@ -3531,7 +3564,9 @@ VERDICT: [Pass / Borderline / Fail — one sentence why]"""
 # ══════════════════════════════════════════════════════════════
 # TAB 7 — INTERVIEW PREP
 # ══════════════════════════════════════════════════════════════
+_perf_mark("<<< EXIT tab 6: Econ Calendar")
 with tabs[7]:
+    _perf_mark("  >>> ENTER tab 7: Interview Prep")
     _perf_mark("tab 7: Interview Prep")
     import random as _random
 
@@ -4218,6 +4253,17 @@ For interview technique questions, give specific, actionable advice."""
             st.rerun()
 
 # ── DISPLAY TIMING (TEMPORARY) ──
+_perf_mark("script finished")
+with st.expander("🔧 Whole-script timing (this rerun, ms)", expanded=True):
+    _perf_total = sum(t for _, t in _PERF_TIMINGS)
+    for _perf_label, _perf_t in _PERF_TIMINGS:
+        _perf_pct = (_perf_t / _perf_total * 100) if _perf_total else 0
+        st.write(f"{_perf_label}: {_perf_t:.0f} ms ({_perf_pct:.0f}%)")
+    st.write(f"**Total: {_perf_total:.0f} ms**")
+# ── END DISPLAY TIMING ──
+
+# ── DISPLAY TIMING (TEMPORARY) ──
+_perf_mark("<<< EXIT tab 7: Interview Prep")
 _perf_mark("script finished")
 with st.expander("🔧 Whole-script timing (this rerun, ms)", expanded=True):
     _perf_total = sum(t for _, t in _PERF_TIMINGS)
