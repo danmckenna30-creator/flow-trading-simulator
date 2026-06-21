@@ -1213,18 +1213,6 @@ def _perf_mark(label):
 _perf_mark("setup + auth + market data + news load (above the tabs)")
 # ── END TIMING SETUP ──
 
-# ── TEMPORARY TIMING ──
-import time as _perf_time
-_PERF_TIMINGS = []
-_PERF_T0 = _perf_time.perf_counter()
-def _perf_mark(label):
-    global _PERF_T0
-    now = _perf_time.perf_counter()
-    _PERF_TIMINGS.append((label, (now - _PERF_T0) * 1000))
-    _PERF_T0 = now
-_perf_mark("setup")
-# ── END ──
-
 tabs = st.tabs(["Macro", "Risk", "Commodities", "S&P500", "Flow Trading", "Trade Ideas", "Econ Calendar", "Interview Prep"])
 
 # ---------- LOAD MARKET DATA ----------
@@ -1347,7 +1335,6 @@ def extract_commodity_themes(news):
 # =========================================================
 
 with tabs[0]:
-    _perf_mark(">> Macro")
     _perf_mark("tab 0: Macro")
     # Auto-refresh trigger every 60 mins
     st_autorefresh(interval=60 * 60 * 1000, key="macro_refresh")
@@ -1369,42 +1356,32 @@ with tabs[0]:
     # needing a separate cache mechanism, and it naturally allows a retry on
     # the next page load if a given attempt fails (rather than blocking all
     # retries for the rest of a 55-minute window regardless of outcome).
-    _existing_news_for_staleness = load_news()
-    _latest_article_time = None
-    if _existing_news_for_staleness is not None and "date" in _existing_news_for_staleness.columns:
-        _latest_article_time = pd.to_datetime(
-            _existing_news_for_staleness["date"], utc=True, errors="coerce"
-        ).max()
-
+    # Gate the pipeline on the last_checked timestamp (when we last actually
+    # ran the pipeline), NOT on article freshness. The article timestamp gate
+    # was broken because GNews's free tier has a 12-hour delay -- a successful
+    # pipeline run can leave the newest article still well over 55 minutes
+    # old, causing should_run to immediately re-trigger on the next click.
+    from sheets_db import load_last_checked
+    _last_checked = load_last_checked()
     should_run = (
-        _latest_article_time is None or
-        pd.isna(_latest_article_time) or
-        (datetime.now(pytz.UTC) - _latest_article_time).total_seconds() > 3300  # 55 minutes
+        _last_checked is None or
+        pd.isna(_last_checked) or
+        (datetime.now(pytz.UTC) - _last_checked).total_seconds() > 3300  # 55 minutes
     )
-
-    _perf_mark(f"Macro: should_run = {should_run}")
 
     if should_run:
         with st.spinner("Fetching latest news and sentiment..."):
-            _perf_mark("Macro: inside spinner, before run_pipeline")
             try:
-                _perf_mark("Macro: try block entered")
                 run_pipeline()
-                _perf_mark("Macro: after run_pipeline")
                 from sheets_db import save_last_checked
                 save_last_checked()
-                _perf_mark("Macro: after save_last_checked")
             except Exception as e:
                 st.warning(f"Pipeline error: {e}")
 
-    _perf_mark("Macro: after pipeline block (regardless of should_run)")
     news_df = load_news()
-    _perf_mark("Macro: after load_news (2nd)")
     gpt = load_gpt()
-    _perf_mark("Macro: after load_gpt")
     ai_hype_df = load_ai_hype_history()
 
-    _perf_mark("Macro: after load_ai_hype_history")
     # Bootstrap only: fires if Sheets genuinely has no GPT analysis yet
     # (e.g. very first run ever). Should rarely trigger now that load_gpt()
     # checks Sheets first instead of a dead local file.
@@ -1425,7 +1402,6 @@ with tabs[0]:
         except Exception as e:
             print(f"[GPT fallback] {e}")
 
-    _perf_mark("Macro: after bootstrap block")
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
@@ -1433,10 +1409,8 @@ with tabs[0]:
         st.markdown("<div class='label'>Last Update</div>", unsafe_allow_html=True)
 
         try:
-            _perf_mark("Macro col1: before load_last_checked")
             from sheets_db import load_last_checked
             last_checked = load_last_checked()
-            _perf_mark("Macro col1: after load_last_checked")
             if last_checked is not None and pd.notna(last_checked):
                 uk_dt = last_checked.astimezone(pytz.timezone("Europe/London"))
                 ts = uk_dt.strftime("%Y-%m-%d %H:%M")
@@ -1487,7 +1461,6 @@ with tabs[0]:
 
     st.markdown("")
 
-    _perf_mark("Macro: after 4-col cards block")
     st.markdown("### Macro Analyst View")
     left, right = st.columns(2)
 
@@ -1972,10 +1945,7 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
             st.session_state[tab_chat_key] = []
             st.rerun()
 
-    _perf_mark("Macro: end of body")
-_perf_mark("<< Macro")
 with tabs[1]:
-    _perf_mark(">> Risk")
     _perf_mark("tab 1: Risk")
     st.markdown("## Risk Monitor")
     st.markdown("---")
@@ -2215,9 +2185,7 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
             st.rerun()
 
     _perf_mark("  Risk: chat input + end of tab")
-_perf_mark("<< Risk")
 with tabs[2]:
-    _perf_mark(">> Commodities")
     _perf_mark("tab 2: Commodities")
     st.markdown("## Commodities")
     st.caption("Live prices, trends, risk themes, and flow signals across energy, metals, and agriculture.")
@@ -2706,9 +2674,7 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
             st.session_state[tab_chat_key] = []
             st.rerun()
 
-_perf_mark("<< Commodities")
 with tabs[3]:
-    _perf_mark(">> S&P500")
     _perf_mark("tab 3: S&P500")
     render_sp500_tab()
 
@@ -2765,9 +2731,7 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
             st.session_state[tab_chat_key] = []
             st.rerun()
 
-_perf_mark("<< S&P500")
 with tabs[4]:
-    _perf_mark(">> Flow Trading")
     _perf_mark("tab 4: Flow Trading")
     render_flow_trading_tab()
 
@@ -2888,9 +2852,7 @@ Be concise (2-4 sentences), explain jargon for beginners, and use the dashboard 
 # ══════════════════════════════════════════════════════════════
 # TAB 5 — TRADE IDEAS
 # ══════════════════════════════════════════════════════════════
-_perf_mark("<< Flow Trading")
 with tabs[5]:
-    _perf_mark(">> Trade Ideas")
     _perf_mark("tab 5: Trade Ideas")
     import json as _json
     from datetime import datetime as _dt2
@@ -3255,9 +3217,7 @@ Be concise (2-4 sentences) and direct."""
 # ══════════════════════════════════════════════════════════════
 # TAB 6 — ECONOMIC CALENDAR
 # ══════════════════════════════════════════════════════════════
-_perf_mark("<< Trade Ideas")
 with tabs[6]:
-    _perf_mark(">> Econ Calendar")
     _perf_mark("tab 6: Econ Calendar")
     import json as _json2
     from datetime import datetime as _dt3, timedelta as _td
@@ -3571,9 +3531,7 @@ VERDICT: [Pass / Borderline / Fail — one sentence why]"""
 # ══════════════════════════════════════════════════════════════
 # TAB 7 — INTERVIEW PREP
 # ══════════════════════════════════════════════════════════════
-_perf_mark("<< Econ Calendar")
 with tabs[7]:
-    _perf_mark(">> Interview Prep")
     _perf_mark("tab 7: Interview Prep")
     import random as _random
 
@@ -4268,13 +4226,3 @@ with st.expander("🔧 Whole-script timing (this rerun, ms)", expanded=True):
         st.write(f"{_perf_label}: {_perf_t:.0f} ms ({_perf_pct:.0f}%)")
     st.write(f"**Total: {_perf_total:.0f} ms**")
 # ── END DISPLAY TIMING ──
-
-# ── DISPLAY ──
-_perf_mark("<< Interview Prep")
-with st.expander("🔧 Timing", expanded=True):
-    _perf_total = sum(t for _, t in _PERF_TIMINGS)
-    for _perf_label, _perf_t in _PERF_TIMINGS:
-        _perf_pct = (_perf_t / _perf_total * 100) if _perf_total else 0
-        st.write(f"{_perf_label}: {_perf_t:.0f} ms ({_perf_pct:.0f}%)")
-    st.write(f"**Total: {_perf_total:.0f} ms**")
-# ── END ──
