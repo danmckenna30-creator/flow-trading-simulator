@@ -477,6 +477,23 @@ def render_flow_trading_tab():
     from datetime import datetime as _dt
     init_flow_state()
 
+    ASSET_REGIONS = {
+        "S&P 500 (SPY)":      "US",
+        "NASDAQ (QQQ)":       "US",
+        "FTSE 100 (ISF)":     "Europe",
+        "EUR/USD":            "Europe",
+        "GBP/USD":            "Europe",
+        "USD/JPY":            "Asia",
+        "USD/CHF":            "Europe",
+        "US 2Y (SHY)":        "US",
+        "US 10Y (IEF)":       "US",
+        "US 30Y (TLT)":       "US",
+        "Brent Crude (BZ=F)": "Global",
+        "Gold (GC=F)":        "Global",
+        "Copper (HG=F)":      "Global",
+        "Natural Gas (NG=F)": "US",
+    }
+
     st.markdown("## 🏦 Flow Trading Simulator")
     st.caption("You are a junior flow trader at a major investment bank. Every hedge costs real money — slippage, market impact, latency drift, and toxic flow all eat into your P&L. Your goal: earn more in spread than you lose in hedging costs.")
 
@@ -496,6 +513,23 @@ def render_flow_trading_tab():
         rp["toxic_flow_prob"]     = st.slider("Toxic Flow Probability",   0.0,  0.5,  float(rp["toxic_flow_prob"]),    0.05)
         rp["toxic_jump_bps"]      = st.slider("Toxic Jump (bps)",         5.0,  50.0, float(rp["toxic_jump_bps"]),     1.0)
         rp["overnight_vol_scale"] = st.slider("Overnight Vol Scale",      0.5,  3.0,  float(rp["overnight_vol_scale"]),0.1)
+        st.markdown("**Order Filter**")
+        st.session_state["desk_focus"] = st.selectbox(
+            "Desk Focus",
+            ["All", "FX", "Rates", "Equities", "Commodities"],
+            index=["All", "FX", "Rates", "Equities", "Commodities"].index(
+                st.session_state.get("desk_focus", "All")
+            ),
+            help="Restrict incoming orders to a single asset class."
+        )
+        st.session_state["region_focus"] = st.selectbox(
+            "Region",
+            ["Global", "US", "Europe", "Asia"],
+            index=["Global", "US", "Europe", "Asia"].index(
+                st.session_state.get("region_focus", "Global")
+            ),
+            help="Further restrict orders by region. 'Global' applies no regional filter."
+        )
         st.markdown("**Quote Skew**")
         rp["max_lean_bps"]      = st.slider("Max Inventory Lean (bps)", 0.0, 20.0, float(rp.get("max_lean_bps", 5.0)),      0.5,
                                             help="Max bps the quote leans due to inventory. 0 = no inventory skew.")
@@ -580,8 +614,22 @@ def render_flow_trading_tab():
 
     # Generate or retrieve current order
     if "current_order" not in st.session_state or st.session_state.get("order_accepted", False) or st.session_state.get("order_rejected", False):
-        # Pick a scenario weighted by current market conditions
-        scenario = random.choice(CLIENT_ORDER_SCENARIOS)
+        _desk   = st.session_state.get("desk_focus", "All")
+        _region = st.session_state.get("region_focus", "Global")
+
+        # Apply asset-class filter
+        _by_desk = [
+            s for s in CLIENT_ORDER_SCENARIOS
+            if _desk == "All" or FLOW_ASSETS.get(s["asset"], {}).get("category") == _desk
+        ] or CLIENT_ORDER_SCENARIOS
+
+        # Apply regional filter on top; fall back to desk-filtered list if empty
+        _filtered = (
+            [s for s in _by_desk if _region == "Global" or ASSET_REGIONS.get(s["asset"]) == _region]
+            or _by_desk
+        )
+
+        scenario = random.choice(_filtered)
         st.session_state["current_order"] = scenario
         st.session_state["order_accepted"] = False
         st.session_state["order_rejected"] = False
