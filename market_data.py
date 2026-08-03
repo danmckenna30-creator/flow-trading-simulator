@@ -559,7 +559,7 @@ def render_sp500_tab():
         # 52-week range bar
         if val["52w_low"] and val["52w_high"]:
             pct_in_range = (val["price"] - val["52w_low"]) / (val["52w_high"] - val["52w_low"]) * 100
-            st.markdown(f"**52-Week Range:** ${val['52w_low']:,.0f} ← SPY at ${val['price']:,.0f} ({pct_in_range:.0f}% of range) → ${val['52w_high']:,.0f}")
+            st.markdown(f"**52-Week Range:** \\${val['52w_low']:,.0f} ← SPY at **\\${val['price']:,.0f}** ({pct_in_range:.0f}% of range) → \\${val['52w_high']:,.0f}")
             st.progress(min(pct_in_range / 100, 1.0))
             st.caption("The progress bar shows where SPY sits within its 52-week range. Near the top (right) = strong momentum but potentially extended. Near the bottom (left) = either a buying opportunity or a deteriorating trend.")
     else:
