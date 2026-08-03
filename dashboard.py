@@ -150,8 +150,8 @@ FLOW_ASSETS = {
     "Natural Gas (NG=F)":  {"ticker":"NG=F",     "spread_bps":3.0,  "hedge_ticker":"UNG",  "category":"Commodities", "description":"Natural gas futures",          "liquidity":1_000_000_000,  "base_vol":0.035},
 }
 
-HEDGE_THRESHOLD_USD = 500_000
-MAX_INVENTORY_USD   = 5_000_000
+HEDGE_THRESHOLD_USD = 2_000_000
+MAX_INVENTORY_USD   = 20_000_000
 
 DEFAULT_RISK_PARAMS = {
     "slippage_min_bps":    1.0,
@@ -696,7 +696,7 @@ def render_flow_trading_tab():
             st.markdown(f"<div class='card'><div class='label'>Inventory After</div><div class='big-number' style='color:{new_color};'>${new_inv:,.0f}</div></div>", unsafe_allow_html=True)
 
         if abs(new_inv) >= HEDGE_THRESHOLD_USD:
-            st.warning(f"⚠️ Accepting this trade will push your {order['asset']} position to ${abs(new_inv):,.0f} — above the $500k hedge threshold. You'll need to hedge after accepting.")
+            st.warning(f"⚠️ Accepting this trade will push your {order['asset']} position to ${abs(new_inv):,.0f} — above the $2M hedge threshold. You'll need to hedge after accepting.")
 
         st.markdown("")
         accept_notional = st.slider(
@@ -815,7 +815,7 @@ def render_flow_trading_tab():
             )
 
         if abs(_new_inv_adj) >= HEDGE_THRESHOLD_USD:
-            st.warning(f"⚠️ If the client deals, your {order['asset']} position will reach ${abs(_new_inv_adj):,.0f} — above the $500k hedge threshold.")
+            st.warning(f"⚠️ If the client deals, your {order['asset']} position will reach ${abs(_new_inv_adj):,.0f} — above the $2M hedge threshold.")
 
         st.markdown("")
         col_q, col_p, col_n = st.columns(3)
@@ -1015,7 +1015,7 @@ def render_flow_trading_tab():
             xaxis=dict(showgrid=False, tickangle=-30)
         )
         st.plotly_chart(fig_inv, use_container_width=True)
-        st.caption("Green = long position (profit if price rises). Red = short position (profit if price falls). Yellow dashed lines = $500k hedge threshold. Bars crossing the threshold signal you need to hedge.")
+        st.caption("Green = long position (profit if price rises). Red = short position (profit if price falls). Yellow dashed lines = $2M hedge threshold. Bars crossing the threshold signal you need to hedge.")
 
         # Hedge signals
         needs_hedge = {a: v for a, v in inv.items() if abs(v) >= HEDGE_THRESHOLD_USD}
@@ -3108,10 +3108,10 @@ with tabs[4]:
         for asset, notional in needs_hedge.items():
             direction = "LONG" if notional > 0 else "SHORT"
             st.warning(f"⚠️ **{asset}** — You are {direction} ${abs(notional):,.0f}. Consider hedging in the Flow Trading tab.")
-        st.caption("A hedge signal fires when a position exceeds $500,000. A 1% adverse move = $5,000 loss. Go to Flow Trading → Compute Hedge to reduce this exposure.")
+        st.caption("A hedge signal fires when a position exceeds $2,000,000. Go to Flow Trading → Compute Hedge to reduce this exposure.")
     else:
         st.success("✅ No hedge signals — all positions within risk limits.")
-        st.caption("Hedge signals appear when any single position exceeds $500,000 notional. Currently all positions are within acceptable limits.")
+        st.caption("Hedge signals appear when any single position exceeds $2,000,000 notional. Currently all positions are within acceptable limits.")
 
 
     st.markdown("---")
