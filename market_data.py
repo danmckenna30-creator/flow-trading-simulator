@@ -78,6 +78,36 @@ def get_yield_curve():
     return curve
 
 
+@st.cache_data(ttl=300)
+def get_uk_yield_curve():
+    """
+    Returns UK gilt yields for 2Y, 5Y, 10Y, 30Y.
+    Attempts live fetch via yfinance Reuters tickers (GB2YT=RR etc.);
+    falls back per-tenor to static estimates if the request fails or
+    Yahoo Finance returns no data for that maturity.
+    Tradeoff vs get_yield_curve(): US yields are fully hardcoded;
+    UK yields are live when available, static otherwise.
+    """
+    fallback = {"2Y": 4.35, "5Y": 4.30, "10Y": 4.55, "30Y": 5.05}
+    uk_tickers = {
+        "2Y":  "GB2YT=RR",
+        "5Y":  "GB5YT=RR",
+        "10Y": "GB10YT=RR",
+        "30Y": "GB30YT=RR",
+    }
+    result = {}
+    for tenor, ticker in uk_tickers.items():
+        try:
+            hist = yf.Ticker(ticker).history(period="5d")
+            if hist is not None and len(hist) > 0:
+                result[tenor] = round(float(hist["Close"].iloc[-1]), 3)
+            else:
+                result[tenor] = fallback[tenor]
+        except Exception:
+            result[tenor] = fallback[tenor]
+    return result
+
+
 def get_price_and_change(ticker):
     """
     Robust price fetcher for equities, FX, and futures.

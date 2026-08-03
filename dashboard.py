@@ -7,7 +7,7 @@ from market_data import get_market_data
 from news_reader import run_pipeline
 from streamlit_autorefresh import st_autorefresh
 import plotly.graph_objects as go
-from market_data import get_yield_curve
+from market_data import get_yield_curve, get_uk_yield_curve
 import pytz
 from market_data import get_advance_decline_line, get_rsp_spy_ratio, compute_sp500_breadth, render_sp500_tab, get_spot_price
 import yfinance as yf
@@ -1817,12 +1817,14 @@ with tabs[0]:
             st.warning(f"Could not load price history for {selected}. The asset may not be available from Yahoo Finance for this period.")
         st.markdown("---")
 
-    st.markdown("### Yield Curve")
-    st.caption("The yield curve shows what interest rate the US government pays to borrow money at different time horizons. Its shape is one of the most watched signals in finance — it tells us what the market expects for growth, inflation, and recession risk.")
+    st.markdown("### Yield Curves — US Treasuries & UK Gilts")
+    st.caption("The yield curve shows what interest rates governments pay to borrow across different time horizons. Its shape is one of the most watched signals in finance. Comparing US Treasuries with UK Gilts reveals transatlantic rate differentials and relative monetary policy stances.")
 
-    curve = get_yield_curve()
+    curve    = get_yield_curve()
+    uk_curve = get_uk_yield_curve()
     maturities    = ["2Y", "5Y", "10Y", "30Y"]
     yields        = [curve[m] for m in maturities]
+    uk_yields     = [uk_curve[m] for m in maturities]
     normal_yields = [2.5, 2.8, 3.0, 3.2]
 
     slope_2s10s = curve["10Y"] - curve["2Y"]
@@ -1858,6 +1860,22 @@ with tabs[0]:
 
     st.markdown(f"<div class='card' style='color:#DDDDDD; margin-bottom:12px;'>📌 <strong>What this means:</strong> {shape_meaning}</div>", unsafe_allow_html=True)
 
+    # UK Gilt metric tiles
+    _uk_slope  = uk_curve["10Y"] - uk_curve["2Y"]
+    _uk_sc     = "#00ff88" if _uk_slope > 0 else "#ff4d4d"
+    _diff_10y  = uk_curve["10Y"] - curve["10Y"]
+    _diff_c    = "#ff6b35" if abs(_diff_10y) > 0.25 else "#FFDC00"
+    st.markdown("##### 🇬🇧 UK Gilt Yields")
+    uk1, uk2, uk3, uk4 = st.columns(4)
+    with uk1:
+        st.markdown(f"<div class='card'><div class='label'>UK 2Y Gilt</div><div class='big-number' style='color:#ff6b35;'>{uk_curve['2Y']:.2f}%</div><div class='label' style='font-size:10px;'>US 2Y: {curve['2Y']:.2f}%</div></div>", unsafe_allow_html=True)
+    with uk2:
+        st.markdown(f"<div class='card'><div class='label'>UK 10Y Gilt</div><div class='big-number' style='color:#ff6b35;'>{uk_curve['10Y']:.2f}%</div><div class='label' style='font-size:10px;'>US 10Y: {curve['10Y']:.2f}%</div></div>", unsafe_allow_html=True)
+    with uk3:
+        st.markdown(f"<div class='card'><div class='label'>UK 30Y Gilt</div><div class='big-number' style='color:#ff6b35;'>{uk_curve['30Y']:.2f}%</div><div class='label' style='font-size:10px;'>US 30Y: {curve['30Y']:.2f}%</div></div>", unsafe_allow_html=True)
+    with uk4:
+        st.markdown(f"<div class='card'><div class='label'>UK 2s10s</div><div class='big-number' style='color:{_uk_sc};'>{_uk_slope:+.2f}%</div><div class='label' style='font-size:10px;'>UK−US 10Y diff: <span style='color:{_diff_c};'>{_diff_10y:+.2f}%</span></div></div>", unsafe_allow_html=True)
+
     fig_yc = go.Figure()
     fig_yc.add_trace(go.Scatter(
         x=maturities, y=normal_yields, mode="lines+markers",
@@ -1878,17 +1896,24 @@ with tabs[0]:
         fill="toself", fillcolor="rgba(0,195,255,0.07)",
         line=dict(color="rgba(0,0,0,0)"), showlegend=False, hoverinfo="skip"
     ))
+    fig_yc.add_trace(go.Scatter(
+        x=maturities, y=uk_yields, mode="lines+markers+text",
+        name="UK Gilts",
+        line=dict(color="#ff6b35", width=2.5),
+        marker=dict(size=10, color="#ffffff", line=dict(width=2, color="#ff6b35")),
+        text=[f"{y:.2f}%" for y in uk_yields], textposition="bottom center"
+    ))
     fig_yc.update_layout(
-        template="plotly_dark", height=360,
+        template="plotly_dark", height=380,
         margin=dict(l=40, r=40, t=50, b=40),
         xaxis_title="Maturity", yaxis_title="Yield (%)",
         xaxis=dict(showgrid=False),
         yaxis=dict(showgrid=True, gridcolor="#333333"),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        title="US Treasury Yield Curve — Current vs Normal"
+        title="US Treasury vs UK Gilt Yield Curves"
     )
     st.plotly_chart(fig_yc, use_container_width=True)
-    st.caption("Blue line = today's curve. Grey dashed = typical pre-2022 normal. The shaded area shows deviation from normal. Blue dipping below grey at the short end = Fed has pushed short-term rates unusually high.")
+    st.caption("Blue = US Treasuries today. Orange = UK Gilts today. Grey dashed = US pre-2022 normal. Shaded blue fill = US deviation from normal. When orange sits above blue across the curve, UK rates are higher than US — typically signals tighter BoE policy or higher UK inflation risk premium.")
 
     if is_inverted:
         st.error("⚠️ Yield curve inverted. 2-year yield above the 10-year. Has preceded every US recession in 50 years. Expect more demand for gold, USD and bonds, less for equities.")
@@ -1925,10 +1950,16 @@ CURRENT US TREASURY YIELD CURVE:
 - 2s10s spread: {slope_2s10s:+.2f}% ({"INVERTED" if is_inverted else "positive"})
 - 5s30s spread: {slope_5s30s:+.2f}%, Shape: {curve_shape}
 
-Write a concise 3-4 sentence commentary covering:
-1. What the current curve shape tells us about growth and inflation expectations
-2. What this means for a flow trader today
-3. The single most important thing to watch on the yield curve right now
+CURRENT UK GILT YIELD CURVE:
+- 2Y: {uk_curve["2Y"]:.2f}%, 5Y: {uk_curve["5Y"]:.2f}%, 10Y: {uk_curve["10Y"]:.2f}%, 30Y: {uk_curve["30Y"]:.2f}%
+- UK 2s10s spread: {(uk_curve["10Y"] - uk_curve["2Y"]):+.2f}%
+- UK−US 10Y differential: {(uk_curve["10Y"] - curve["10Y"]):+.2f}%
+
+Write a concise 4-5 sentence commentary covering:
+1. What the current US curve shape tells us about growth and inflation expectations
+2. How the UK gilt curve compares — are gilts pricing in more or less risk, and why might that be?
+3. What the UK−US 10Y spread signals for GBP/USD and cross-market flows
+4. The single most important thing to watch across both curves right now
 
 Bloomberg style. Direct. Plain prose only."""
 
