@@ -64,48 +64,64 @@ def get_market_data():
     return data
 
 
+def _fetch_cboe_yield(ticker):
+    """Fetch yield % from a Yahoo Finance CBOE yield index (^TNX, ^FVX, ^TYX, ^IRX)."""
+    hist = yf.Ticker(ticker).history(period="5d")
+    if hist is None or len(hist) == 0:
+        return None
+    return round(float(hist["Close"].iloc[-1]), 3)
+
+
+def _fetch_etf_yield_pct(ticker):
+    """Return ETF trailing distribution yield as a percentage (e.g. 4.44, not 0.0444)."""
+    y = yf.Ticker(ticker).info.get("yield")
+    return round(y * 100, 3) if y and y > 0 else None
+
+
+@st.cache_data(ttl=300)
 def get_yield_curve():
     """
-    Returns approximate yields for 2Y, 5Y, 10Y, 30Y.
-    Uses ETF proxies for stability.
+    Live US Treasury yields via Yahoo Finance CBOE yield indices.
+    5Y/10Y/30Y: ^FVX / ^TNX / ^TYX (return % directly).
+    2Y: linearly interpolated from ^IRX (3M) and ^FVX (5Y).
+    Falls back to static estimates per tenor on any failure.
     """
-    curve = {
-        "2Y": 4.50,
-        "5Y": 4.35,
-        "10Y": 4.30,
-        "30Y": 4.45
-    }
-    return curve
+    fallback = {"2Y": 4.50, "5Y": 4.35, "10Y": 4.30, "30Y": 4.45}
+    try:
+        irx = _fetch_cboe_yield("^IRX") or fallback["2Y"]
+        fvx = _fetch_cboe_yield("^FVX") or fallback["5Y"]
+        tnx = _fetch_cboe_yield("^TNX") or fallback["10Y"]
+        tyx = _fetch_cboe_yield("^TYX") or fallback["30Y"]
+        y2y = round(irx + (fvx - irx) * ((2.0 - 0.25) / (5.0 - 0.25)), 3)
+        return {"2Y": y2y, "5Y": fvx, "10Y": tnx, "30Y": tyx}
+    except Exception:
+        return fallback.copy()
 
 
 @st.cache_data(ttl=300)
 def get_uk_yield_curve():
     """
-    Returns UK gilt yields for 2Y, 5Y, 10Y, 30Y.
-    Attempts live fetch via yfinance Reuters tickers (GB2YT=RR etc.);
-    falls back per-tenor to static estimates if the request fails or
-    Yahoo Finance returns no data for that maturity.
-    Tradeoff vs get_yield_curve(): US yields are fully hardcoded;
-    UK yields are live when available, static otherwise.
+    Live UK gilt yields derived from gilt ETF distribution yields via Yahoo Finance.
+    IGLS.L (0-5yr) → 2Y proxy; avg(IGLT.L, VGOV.L) → 10Y proxy; GLTL.L (15+yr) → 30Y proxy.
+    5Y is linearly interpolated between 2Y and 10Y.
+    Falls back to static estimates per tenor on any failure.
     """
     fallback = {"2Y": 4.35, "5Y": 4.30, "10Y": 4.55, "30Y": 5.05}
-    uk_tickers = {
-        "2Y":  "GB2YT=RR",
-        "5Y":  "GB5YT=RR",
-        "10Y": "GB10YT=RR",
-        "30Y": "GB30YT=RR",
-    }
-    result = {}
-    for tenor, ticker in uk_tickers.items():
-        try:
-            hist = yf.Ticker(ticker).history(period="5d")
-            if hist is not None and len(hist) > 0:
-                result[tenor] = round(float(hist["Close"].iloc[-1]), 3)
-            else:
-                result[tenor] = fallback[tenor]
-        except Exception:
-            result[tenor] = fallback[tenor]
-    return result
+    try:
+        igls = _fetch_etf_yield_pct("IGLS.L")
+        iglt = _fetch_etf_yield_pct("IGLT.L")
+        vgov = _fetch_etf_yield_pct("VGOV.L")
+        gltl = _fetch_etf_yield_pct("GLTL.L")
+
+        y2  = igls or fallback["2Y"]
+        y10_vals = [v for v in (iglt, vgov) if v]
+        y10 = round(sum(y10_vals) / len(y10_vals), 3) if y10_vals else fallback["10Y"]
+        y30 = gltl or fallback["30Y"]
+        y5  = round((y2 + y10) / 2, 3)
+
+        return {"2Y": y2, "5Y": y5, "10Y": y10, "30Y": y30}
+    except Exception:
+        return fallback.copy()
 
 
 def get_price_and_change(ticker):
