@@ -1267,50 +1267,41 @@ for _k in list(prices.keys()):
 
 # ---------- THEME EXTRACTION ----------
 def extract_news_themes(news):
+    """Returns dict of theme_key -> list of matching headlines (empty list = not active)."""
     themes = {
-        "oil_supply": False,
-        "oil_geopolitics": False,
-        "oil_demand": False,
-        "energy_prices": False,
-        "china_growth": False,
-        "manufacturing": False,
-        "inflation": False,
-        "weather": False,
-        "grain_supply": False,
-        "ai_hype": False
+        "oil_supply":     [],
+        "oil_geopolitics":[],
+        "oil_demand":     [],
+        "energy_prices":  [],
+        "china_growth":   [],
+        "manufacturing":  [],
+        "inflation":      [],
+        "weather":        [],
+        "grain_supply":   [],
+        "ai_hype":        [],
     }
-
     for item in news:
-        h = item["headline"].lower()
-
+        h   = item["headline"].lower()
+        raw = item["headline"]
         if any(k in h for k in ["opec", "production cut", "supply cut", "oil output"]):
-            themes["oil_supply"] = True
-
-        if any(k in h for k in ["middle east", "iran", "israel", "houthi", "red sea", "attack", "strike"]):
-            themes["oil_geopolitics"] = True
-
+            themes["oil_supply"].append(raw)
+        if any(k in h for k in ["middle east", "iran", "israel", "houthi", "red sea", "attack", "strike", "conflict", "war", "sanction"]):
+            themes["oil_geopolitics"].append(raw)
         if any(k in h for k in ["demand", "travel", "consumption", "jet fuel"]):
-            themes["oil_demand"] = True
-
+            themes["oil_demand"].append(raw)
         if "energy" in h:
-            themes["energy_prices"] = True
-
+            themes["energy_prices"].append(raw)
         if any(k in h for k in ["china", "pmi", "manufacturing", "factory"]):
-            themes["china_growth"] = True
-            themes["manufacturing"] = True
-
-        if any(k in h for k in ["inflation", "cpi", "ppi", "yields", "rates"]):
-            themes["inflation"] = True
-
-        if any(k in h for k in ["drought", "harvest", "crop", "weather", "heatwave"]):
-            themes["weather"] = True
-
+            themes["china_growth"].append(raw)
+            themes["manufacturing"].append(raw)
+        if any(k in h for k in ["inflation", "cpi", "ppi", "yields", "rates", "fed", "boe", "ecb", "central bank", "hike", "cut"]):
+            themes["inflation"].append(raw)
+        if any(k in h for k in ["drought", "harvest", "crop", "weather", "heatwave", "flood"]):
+            themes["weather"].append(raw)
         if any(k in h for k in ["grain", "wheat", "corn", "export ban", "ukraine"]):
-            themes["grain_supply"] = True
-
+            themes["grain_supply"].append(raw)
         if any(k in h for k in ["ai", "artificial intelligence", "chip", "semiconductor", "gpu", "nvidia", "openai"]):
-            themes["ai_hype"] = True
-
+            themes["ai_hype"].append(raw)
     return themes
 
 # ---------- COMMODITY THEMES ----------
@@ -1441,20 +1432,17 @@ with tabs[0]:
 
     with col1:
         st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.markdown("<div class='label'>Last Update</div>", unsafe_allow_html=True)
-
+        st.markdown("<div class='label'>Last Viewed</div>", unsafe_allow_html=True)
+        _now_uk = datetime.now(pytz.timezone("Europe/London"))
+        st.markdown(f"<div class='big-number'>{_now_uk.strftime('%Y-%m-%d %H:%M')}</div>", unsafe_allow_html=True)
         try:
             from sheets_db import load_last_checked
             last_checked = load_last_checked()
             if last_checked is not None and pd.notna(last_checked):
-                uk_dt = last_checked.astimezone(pytz.timezone("Europe/London"))
-                ts = uk_dt.strftime("%Y-%m-%d %H:%M")
-            else:
-                ts = "No data"
+                _data_dt = last_checked.astimezone(pytz.timezone("Europe/London"))
+                st.markdown(f"<div class='label' style='font-size:10px;'>Data fetched: {_data_dt.strftime('%H:%M')}</div>", unsafe_allow_html=True)
         except Exception:
-            ts = "No data"
-
-        st.markdown(f"<div class='big-number'>{ts}</div>", unsafe_allow_html=True)
+            pass
         st.markdown("</div>", unsafe_allow_html=True)
 
         # Manual refresh button -- bypasses the 55-minute gate.
@@ -2033,6 +2021,7 @@ with tabs[1]:
     usdjpy_change = (prices.get("USDJPY",        {}) or {}).get("change") or 0
     oil_change    = (prices.get("Brent Crude",   {}) or {}).get("change") or 0
     copper_change = (prices.get("Copper",        {}) or {}).get("change") or 0
+    gold_change   = (prices.get("Gold",          {}) or {}).get("change") or 0
     avg_sentiment = news_df["sentiment"].mean() if news_df is not None and "sentiment" in news_df.columns else 0
 
     risk_score = (
@@ -2053,7 +2042,7 @@ with tabs[1]:
     else:                 vol_regime, vol_color = "HIGH VOL",   "#ff4d4d"
 
     # ── SECTION 1: MARKET RISK ──────────────────────────────────
-    st.markdown("### 📊 Section 1 — Market Risk Overview")
+    st.markdown("### 📊 Market Risk Overview")
     st.caption("This section shows the overall market environment. As a flow trader, this tells you whether clients are likely buying risk assets (stocks, oil, copper) or selling them for safety (gold, USD, bonds).")
 
     c1, c2, c3, c4 = st.columns(4)
@@ -2130,6 +2119,7 @@ with tabs[1]:
 
     # FX Pairs
     st.markdown("#### FX Risk Pairs")
+    _RISK_FX_TICKERS = {"USDJPY": "JPY=X", "GBPUSD": "GBPUSD=X", "EURUSD": "EURUSD=X"}
     fx_cols = st.columns(3)
     for i, pair in enumerate(["USDJPY", "GBPUSD", "EURUSD"]):
         item   = (prices.get(pair, {}) or {})
@@ -2143,36 +2133,291 @@ with tabs[1]:
             st.markdown(f"<div class='big-number'>{price if price else 'N/A'}</div>", unsafe_allow_html=True)
             st.markdown(f"<div style='color:{color}; font-weight:bold;'>{chstr}</div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
+            if st.button("📈 Chart", key=f"risk_fx_btn_{pair}"):
+                if st.session_state.get("risk_fx_selected") == pair:
+                    st.session_state.pop("risk_fx_selected", None)
+                else:
+                    st.session_state["risk_fx_selected"] = pair
+
+    _risk_fx_sel = st.session_state.get("risk_fx_selected")
+    if _risk_fx_sel and _risk_fx_sel in _RISK_FX_TICKERS:
+        st.markdown(f"### 📈 {_risk_fx_sel} — Price History")
+        _rfx_p_opts = {"1 Week": "5d", "1 Month": "1mo", "3 Months": "3mo", "6 Months": "6mo", "1 Year": "1y", "2 Years": "2y"}
+        _rfx_pcol, _rfx_ccol = st.columns([3, 1])
+        with _rfx_pcol:
+            _rfx_period_label = st.select_slider("Time period", options=list(_rfx_p_opts.keys()), value="3 Months", key="risk_fx_period")
+        with _rfx_ccol:
+            st.markdown("")
+            if st.button("✕ Close", key="risk_fx_close"):
+                st.session_state.pop("risk_fx_selected", None)
+                st.rerun()
+        _rfx_period = _rfx_p_opts[_rfx_period_label]
+
+        @st.cache_data(ttl=900)
+        def _get_risk_fx_history(ticker, period):
+            try:
+                hist = yf.Ticker(ticker).history(period=period)
+                if hist is not None and len(hist) > 1:
+                    return hist["Close"].dropna()
+            except Exception:
+                pass
+            return None
+
+        with st.spinner(f"Loading {_risk_fx_sel} history..."):
+            _rfx_hist = _get_risk_fx_history(_RISK_FX_TICKERS[_risk_fx_sel], _rfx_period)
+
+        if _rfx_hist is not None and len(_rfx_hist) > 1:
+            _rfx_dates  = [str(d.date()) for d in _rfx_hist.index]
+            _rfx_closes = list(_rfx_hist.values)
+            _rfx_chg    = (_rfx_closes[-1] - _rfx_closes[0]) / _rfx_closes[0] * 100
+            _rfx_color  = "#00ff88" if _rfx_chg >= 0 else "#ff4d4d"
+            _s1, _s2, _s3, _s4 = st.columns(4)
+            with _s1: st.markdown(f"<div class='card'><div class='label'>Current</div><div class='big-number'>{_rfx_closes[-1]:.4f}</div></div>", unsafe_allow_html=True)
+            with _s2: st.markdown(f"<div class='card'><div class='label'>{_rfx_period_label} Return</div><div class='big-number' style='color:{_rfx_color};'>{_rfx_chg:+.2f}%</div></div>", unsafe_allow_html=True)
+            with _s3: st.markdown(f"<div class='card'><div class='label'>Period High</div><div class='big-number' style='color:#00ff88;'>{max(_rfx_closes):.4f}</div></div>", unsafe_allow_html=True)
+            with _s4: st.markdown(f"<div class='card'><div class='label'>Period Low</div><div class='big-number' style='color:#ff4d4d;'>{min(_rfx_closes):.4f}</div></div>", unsafe_allow_html=True)
+            _rfx_fig = go.Figure()
+            _rfx_fig.add_trace(go.Scatter(
+                x=_rfx_dates, y=_rfx_closes, mode="lines", name=_risk_fx_sel,
+                line=dict(color=_rfx_color, width=2),
+                fill="tozeroy", fillcolor=f"rgba({'0,255,136' if _rfx_chg >= 0 else '255,77,77'},0.05)"
+            ))
+            _rfx_fig.update_layout(
+                template="plotly_dark", height=400,
+                margin=dict(l=40, r=40, t=30, b=40),
+                xaxis=dict(showgrid=False, rangeslider=dict(visible=True, thickness=0.05)),
+                yaxis=dict(showgrid=True, gridcolor="#333333"),
+                hovermode="x unified"
+            )
+            st.plotly_chart(_rfx_fig, use_container_width=True)
+            st.caption(f"**{_risk_fx_sel}** | {_rfx_period_label} | Drag the range bar at the bottom to zoom into a specific period.")
+        else:
+            st.warning(f"Could not load price history for {_risk_fx_sel}.")
     st.caption("USD/JPY rising = risk-on (investors selling safe-haven Yen). GBP/USD and EUR/USD rising = dollar weakening, positive for global risk. Large FX moves signal big institutional flows that flow traders need to be aware of.")
     st.markdown("---")
 
     # News Risk Themes
     st.markdown("#### News-Driven Risk Themes")
+    st.caption("Themes extracted from live headlines. Expand each card for detail on what's driving the risk, how to navigate it, and where the opportunities are.")
+
+    _THEME_DETAIL = {
+        "oil_supply": {
+            "label": "Oil Supply Risk", "icon": "⛽",
+            "what": (
+                "OPEC+ production decisions, pipeline disruptions, or unilateral cuts are tightening the physical crude market. "
+                "When supply is constrained relative to demand, the oil price curve typically moves into backwardation — spot prices above futures — "
+                "which signals real physical tightness rather than speculative positioning. This feeds directly into headline inflation."
+            ),
+            "navigate": (
+                "Expect elevated volatility on crude desks. Clients in energy-exposed sectors — airlines, shipping, industrials — "
+                "will seek to hedge forward exposure. Watch for widening bid-ask spreads on Brent and WTI as market makers price in uncertainty. "
+                "Tighten risk limits on energy names and expect increased hedge fund activity."
+            ),
+            "opportunity": (
+                "Long Brent or WTI via futures or structured product if you believe the supply cut holds. "
+                "Energy equities (XLE, BP, Shell) typically lag the commodity move — there can be a profitable catch-up trade. "
+                "Options vol on oil is likely cheap relative to the binary supply/demand outcome."
+            ),
+        },
+        "oil_geopolitics": {
+            "label": "Geopolitical Risk", "icon": "🌍",
+            "what": (
+                "Active conflict, sanctions, or military escalation in or near major oil-producing or transit regions is elevating the geopolitical risk premium "
+                "embedded in energy prices. Historically, every major Middle East conflict has added a $5–20/bbl risk premium to Brent crude within days of escalation. "
+                "Beyond oil, geopolitical tension drives safe-haven flows into USD, gold, and US Treasuries, while risk assets (equities, EM currencies) sell off."
+            ),
+            "navigate": (
+                "Implement a risk-off overlay: reduce net long exposure to equities and EM assets. Expect client orders skewed toward gold, USD, and short-duration bonds. "
+                "Widen spreads on FX pairs with regional exposure (USD/TRY, USD/ILS, EUR/USD in a dollar-strength scenario). "
+                "Monitor the VIX — a spike above 20 typically accelerates the flight-to-safety trade and increases toxic flow probability."
+            ),
+            "opportunity": (
+                "Long gold as the classic geopolitical hedge — it responds faster than bonds when conflict risk spikes. "
+                "Long USD/JPY puts (yen strengthens in risk-off). Defence sector equities (Raytheon, BAE Systems, Rheinmetall) often rally on escalation. "
+                "Short crude call spreads if you think the premium will compress once the initial shock passes."
+            ),
+        },
+        "oil_demand": {
+            "label": "Demand Concern", "icon": "📉",
+            "what": (
+                "Weakening signals from demand-side indicators — travel data, jet fuel consumption, shipping volumes, or PMI readings — suggest global growth is slowing. "
+                "Oil demand is one of the most reliable leading indicators of economic activity. A demand-driven oil sell-off is fundamentally different from a supply-driven one: "
+                "it points to a broader economic slowdown rather than a commodity-specific supply shock."
+            ),
+            "navigate": (
+                "Reduce cyclical exposure across the board. In a demand-driven oil decline, copper, shipping rates, and industrial metals typically follow. "
+                "Watch for clients repositioning out of energy and into defensives (utilities, staples, healthcare). "
+                "Inventory lean toward defensive assets is appropriate. Flows into long-duration bonds are likely as the market prices in rate cuts."
+            ),
+            "opportunity": (
+                "Long US Treasuries and UK gilts as the market prices in slower growth and potential rate cuts. "
+                "Short crude producers who have high break-even costs (US shale names are vulnerable). "
+                "Long airlines on a second-order basis if lower fuel costs improve margins faster than demand falls."
+            ),
+        },
+        "energy_prices": {
+            "label": "Energy Price Pressure", "icon": "⚡",
+            "what": (
+                "Elevated energy prices — whether gas, electricity, or oil — are feeding into producer costs and household budgets across multiple economies. "
+                "This acts as a tax on economic activity, compresses corporate margins in energy-intensive sectors, and keeps underlying inflation elevated. "
+                "Central banks face a difficult trade-off: tightening to control energy-driven inflation risks choking growth."
+            ),
+            "navigate": (
+                "Energy-sensitive sectors — utilities, chemicals, airlines, shipping — face margin compression. Watch for earnings guidance downgrades in these names. "
+                "Expect bond markets to remain volatile as the market debates how central banks respond. "
+                "GBP is particularly sensitive to UK energy prices given the country's exposure to gas imports."
+            ),
+            "opportunity": (
+                "Long renewables and energy efficiency plays (they benefit from the long-term energy transition argument). "
+                "Long oil and gas producers with low production costs (they capture the spread between cost and market price). "
+                "Inflation-linked bonds (TIPS, UK linkers) as a hedge if you believe energy prices keep CPI elevated."
+            ),
+        },
+        "china_growth": {
+            "label": "China Growth Risk", "icon": "🇨🇳",
+            "what": (
+                "Weakness in Chinese economic data — PMI, industrial output, retail sales, or property sector stress — signals slower demand "
+                "from the world's largest commodity consumer and second-largest economy. China accounts for roughly 15% of global GDP, "
+                "over 50% of global copper demand, and 15% of global oil demand. A meaningful slowdown ripples across EM equities, "
+                "industrial metals, and Asian FX almost immediately."
+            ),
+            "navigate": (
+                "Reduce exposure to copper and iron ore (most directly tied to Chinese industrial activity). "
+                "EM currencies with China trade linkages (AUD, BRL, ZAR, KRW) are vulnerable — expect client selling. "
+                "Watch USD/CNH as the canary — any move above key resistance signals capital outflow concerns. "
+                "European luxury and mining stocks (LVMH, Rio Tinto, BHP) have significant China revenue exposure."
+            ),
+            "opportunity": (
+                "Short AUD/USD as the cleanest liquid proxy for China growth disappointment. "
+                "Long USD as a safe haven if China slowdown drives broad EM risk-off. "
+                "If Beijing responds with stimulus, a sharp reversal in Chinese equities (CSI 300, Hang Seng) can be a fast trade — "
+                "fiscal and monetary stimulus announcements have historically generated 5–10% single-day moves."
+            ),
+        },
+        "manufacturing": {
+            "label": "Manufacturing Weakness", "icon": "🏭",
+            "what": (
+                "PMI readings below 50 or deteriorating factory output data signal contraction in the goods-producing sector. "
+                "Manufacturing weakness typically leads service sector slowdowns by 3–6 months and is a reliable early-warning indicator "
+                "for corporate earnings deterioration. Industrial metals and energy demand tend to fall alongside manufacturing activity."
+            ),
+            "navigate": (
+                "Reduce exposure to industrials, materials, and global cyclicals. Capital goods companies (Caterpillar, Siemens, ABB) "
+                "face order book deterioration. In FX, industrial exporters' currencies (EUR, KRW, JPY) can weaken if their manufacturing base slows. "
+                "Tighten spread on flow from industrial clients who may be selling assets to manage working capital."
+            ),
+            "opportunity": (
+                "Long quality defensive equities (consumer staples, healthcare) which hold up in a manufacturing downturn. "
+                "Short copper as the most liquid manufacturing-proxy commodity. "
+                "If the weakness is concentrated in Europe (German PMI is key), short EUR/USD is a high-conviction trade."
+            ),
+        },
+        "inflation": {
+            "label": "Inflation / Rate Risk", "icon": "📈",
+            "what": (
+                "Elevated or re-accelerating inflation data — CPI, PPI, core PCE — forces central banks to keep rates higher for longer or resume tightening. "
+                "This compresses equity valuations (higher discount rates), pressures long-duration bond prices, and tightens financial conditions broadly. "
+                "For flow traders, rate risk is the dominant macro theme: it affects every asset class through duration, credit spreads, and FX carry."
+            ),
+            "navigate": (
+                "Duration risk is your primary concern — reduce long-duration bond exposure and hedge rates books. "
+                "In equities, rotate from growth/tech (long-duration equities) into value and financials (which benefit from higher rates). "
+                "Expect client demand for rate swaps, inflation-linked instruments, and FX hedges as corporate treasurers reassess their positions. "
+                "Watch the 2s10s spread closely — if the curve re-inverts, recession risk increases sharply."
+            ),
+            "opportunity": (
+                "Long bank stocks (higher rates = wider net interest margins). "
+                "Short long-duration government bonds (TLT, gilt futures) if you believe inflation is sticky. "
+                "Long USD if the Fed is more hawkish than other central banks — this has been the dominant FX theme in recent cycles. "
+                "Inflation-linked bonds are a direct hedge if CPI surprises to the upside."
+            ),
+        },
+        "weather": {
+            "label": "Weather / Crop Risk", "icon": "🌦",
+            "what": (
+                "Extreme weather events — drought, flooding, heatwaves — are disrupting agricultural production in key growing regions. "
+                "Weather-driven supply shocks are structurally different from geopolitical ones: they are temporary but can be severe and unpredictable. "
+                "Agricultural commodity markets are highly sensitive to USDA crop reports, La Niña/El Niño cycles, and regional precipitation data."
+            ),
+            "navigate": (
+                "Monitor grains (corn, wheat, soybeans) for volatility spikes around USDA report dates. "
+                "Food-importing nations' currencies (Egypt, Pakistan, many frontier EM) are vulnerable if staple prices spike. "
+                "Agricultural commodities can move 10–20% in days on weather shock — manage position sizing accordingly."
+            ),
+            "opportunity": (
+                "Long agricultural futures (corn, wheat, soybeans) if crop damage is confirmed and supply is genuinely impaired. "
+                "Agricultural equipment companies (Deere, CNH Industrial) can benefit if farmers invest in precision agriculture to manage weather risk. "
+                "Fertiliser companies may see demand pull-forward as farmers try to maximise yields from remaining productive land."
+            ),
+        },
+        "grain_supply": {
+            "label": "Grain Supply Risk", "icon": "🌾",
+            "what": (
+                "Disruption to global grain exports — whether from conflict in major producing regions, export bans, or port closures — "
+                "creates acute food security risk for import-dependent nations. Ukraine and Russia together account for roughly 28% of global wheat exports. "
+                "Any disruption to Black Sea shipping corridors has historically caused immediate spikes in wheat and corn futures."
+            ),
+            "navigate": (
+                "Food price inflation feeds into headline CPI in affected countries, complicating central bank policy. "
+                "Emerging market currencies of food-importing nations are most exposed. "
+                "Watch for sovereign credit stress in frontier markets if food import bills surge — this can trigger broader EM risk-off."
+            ),
+            "opportunity": (
+                "Long wheat futures (ZW) and corn futures (ZC) on confirmed supply disruption. "
+                "Long fertiliser names (Nutrien, Mosaic) — food security concerns increase agricultural input spending. "
+                "Short EM currencies of food-import-dependent economies (Egyptian Pound, Pakistani Rupee, Bangladeshi Taka are structurally exposed)."
+            ),
+        },
+        "ai_hype": {
+            "label": "AI / Tech Cycle Risk", "icon": "🤖",
+            "what": (
+                "Elevated AI and technology investment cycle headlines signal both opportunity and concentration risk. "
+                "The AI capex cycle is driving enormous demand for semiconductors, data centre infrastructure, and power — "
+                "but market valuations in this space are pricing in a long runway of growth with limited margin for disappointment. "
+                "A single earnings miss from a key AI infrastructure name (NVIDIA, TSMC, ASML) can trigger sharp sector-wide de-rating."
+            ),
+            "navigate": (
+                "Monitor concentration risk: the S&P 500's top 7 stocks account for ~30% of the index, "
+                "and most have significant AI exposure. A tech-driven correction can take the entire index lower. "
+                "Watch semiconductor lead times and hyperscaler capex guidance as leading indicators for the cycle's health. "
+                "Expect elevated put demand from institutional clients hedging their outsized tech positions."
+            ),
+            "opportunity": (
+                "Long AI infrastructure picks-and-shovels plays: power utilities, cooling systems, data centre REITs. "
+                "Long NVDA volatility — the stock moves 5–10% on earnings, and IV is often underpriced for the magnitude of moves. "
+                "If sentiment turns, short high-multiple SaaS names (most exposed to rate-driven de-rating). "
+                "Long physical gold as a hedge against the scenario where AI productivity gains disappoint and the cycle reverses."
+            ),
+        },
+    }
+
     if news_df is not None and len(news_df) > 0:
         news_list   = news_df.to_dict(orient="records")
         risk_themes = extract_news_themes(news_list)
-        theme_labels = {
-            "oil_supply":     "⛽ Oil Supply Risk",
-            "oil_geopolitics":"🌍 Geopolitical Risk",
-            "oil_demand":     "📉 Demand Concern",
-            "energy_prices":  "⚡ Energy Price Pressure",
-            "china_growth":   "🇨🇳 China Growth Risk",
-            "manufacturing":  "🏭 Manufacturing Weakness",
-            "inflation":      "📈 Inflation / Rate Risk",
-            "weather":        "🌦 Weather / Crop Risk",
-            "grain_supply":   "🌾 Grain Supply Risk",
-        }
-        active = [label for key, label in theme_labels.items() if risk_themes.get(key)]
-        if active:
-            tcols = st.columns(3)
-            for i, label in enumerate(active):
-                with tcols[i % 3]:
-                    st.markdown(f"<div class='card' style='color:#FFDC00;'>{label}</div>", unsafe_allow_html=True)
+        active_themes = [(k, v) for k, v in risk_themes.items() if v and k in _THEME_DETAIL]
+
+        if active_themes:
+            for _tkey, _headlines in active_themes:
+                _td = _THEME_DETAIL[_tkey]
+                _deduped = list(dict.fromkeys(_headlines))[:3]
+                with st.expander(f"{_td['icon']} {_td['label']} — {len(_deduped)} headline{'s' if len(_deduped) != 1 else ''} detected", expanded=False):
+                    st.markdown(f"<div style='color:#FFDC00; font-weight:bold; margin-bottom:6px;'>What is this risk?</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='color:#DDDDDD; margin-bottom:12px;'>{_td['what']}</div>", unsafe_allow_html=True)
+
+                    st.markdown(f"<div style='color:#00c3ff; font-weight:bold; margin-bottom:6px;'>📰 Triggering headlines</div>", unsafe_allow_html=True)
+                    for _hl in _deduped:
+                        st.markdown(f"<div style='color:#aaaaaa; font-size:12px; margin-bottom:3px;'>▸ {_hl}</div>", unsafe_allow_html=True)
+
+                    st.markdown("<div style='margin-top:12px;'></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='color:#ff6b35; font-weight:bold; margin-bottom:6px;'>⚠️ How to navigate</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='color:#DDDDDD; margin-bottom:12px;'>{_td['navigate']}</div>", unsafe_allow_html=True)
+
+                    st.markdown(f"<div style='color:#00ff88; font-weight:bold; margin-bottom:6px;'>💡 Opportunities</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='color:#DDDDDD;'>{_td['opportunity']}</div>", unsafe_allow_html=True)
         else:
-            st.info("No elevated risk themes in current headlines.")
+            st.info("No elevated risk themes detected in current headlines.")
     else:
         st.info("No news data available yet.")
-    st.caption("These themes are extracted from today's headlines. Each active theme is a macro risk that could drive client flow — e.g. geopolitical risk pushes clients into gold and out of equities.")
     st.markdown("---")
     st.markdown("---")
     st.markdown("#### 🤖 AI Risk Narrative")
